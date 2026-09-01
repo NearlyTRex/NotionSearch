@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NotionSearch</title>
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+</head>
+<body>
+
+<div id="loading" class="screen center">
+  <div class="spinner"></div>
+</div>
+
+<!-- ── Sign in ───────────────────────────────────────────── -->
+<div id="screen-login" class="screen center hidden">
+  <form class="card narrow" id="login-form">
+    <h1>🔍 NotionSearch</h1>
+    <p class="muted">This copy is password protected.</p>
+    <label for="login-password">Password</label>
+    <input type="password" id="login-password" autocomplete="current-password" required>
+    <div class="error hidden" id="login-error"></div>
+    <button type="submit" class="primary">Sign in</button>
+  </form>
+</div>
+
+<!-- ── First-run setup ───────────────────────────────────── -->
+<div id="screen-setup" class="screen hidden">
+  <div class="card wide setup">
+    <h1>🔍 Welcome to NotionSearch</h1>
+    <p class="lead">Let's connect your Notion. This takes about two minutes and you only do it once.</p>
+
+    <ol class="steps">
+      <li>
+        <h3>Create an integration</h3>
+        <p>Open <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener">notion.so/my-integrations</a>
+           and click <b>New integration</b>. Give it a name like <i>Search</i>, pick your workspace,
+           and make sure its capabilities include <b>Read content</b>.</p>
+      </li>
+      <li>
+        <h3>Copy the secret</h3>
+        <p>On the integration's page, find <b>Internal Integration Secret</b> and click <b>Show</b>, then <b>Copy</b>.
+           It starts with <code>ntn_</code> or <code>secret_</code>. Paste it below.</p>
+      </li>
+      <li>
+        <h3>Share your pages with it</h3>
+        <p class="callout">
+          <b>This is the step people miss.</b> Notion only lets the integration see pages you explicitly share with it.
+          In Notion, open a top-level page, click the <b>•••</b> menu at the top right, choose
+          <b>Connections</b> → <b>Connect to</b>, and pick your integration.
+          Everything nested inside that page is included automatically, so sharing a few top-level
+          pages usually covers the whole workspace.
+        </p>
+      </li>
+    </ol>
+
+    <form id="setup-form">
+      <label for="setup-token">Internal Integration Secret</label>
+      <input type="password" id="setup-token" placeholder="ntn_..." autocomplete="off" spellcheck="false" required>
+      <div class="error hidden" id="setup-error"></div>
+      <button type="submit" class="primary" id="setup-submit">Connect to Notion</button>
+    </form>
+  </div>
+</div>
+
+<!-- ── Main app ──────────────────────────────────────────── -->
+<div id="screen-app" class="screen hidden">
+  <header class="topbar">
+    <div class="brand">🔍 <span>NotionSearch</span></div>
+    <div class="searchwrap">
+      <input type="search" id="q" placeholder="Search your Notion…  try a half-remembered phrase" autocomplete="off" spellcheck="false">
+      <kbd class="slash">/</kbd>
+    </div>
+    <div class="topbar-actions">
+      <button id="btn-sync" class="ghost" title="Check Notion for changes">Sync</button>
+      <button id="btn-settings" class="ghost icon" title="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div id="syncbar" class="syncbar hidden">
+    <div class="syncbar-inner">
+      <div class="progress"><div class="progress-fill" id="sync-fill"></div></div>
+      <span id="sync-text" class="sync-text"></span>
+      <button id="btn-cancel-sync" class="link">Cancel</button>
+    </div>
+  </div>
+
+  <main class="layout">
+    <aside class="filters" id="filters">
+      <div class="filter-group">
+        <h4>Sort</h4>
+        <select id="sort">
+          <option value="relevance">Best match</option>
+          <option value="recent">Recently edited</option>
+          <option value="oldest">Oldest first</option>
+          <option value="title">Title A–Z</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <h4>Edited</h4>
+        <div class="chips" id="chips-edited">
+          <button class="chip active" data-edited="">Any time</button>
+          <button class="chip" data-edited="day">Today</button>
+          <button class="chip" data-edited="week">This week</button>
+          <button class="chip" data-edited="month">This month</button>
+          <button class="chip" data-edited="year">This year</button>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <h4>Type</h4>
+        <div class="chips" id="chips-object">
+          <button class="chip active" data-object="">Everything</button>
+          <button class="chip" data-object="page">Pages</button>
+          <button class="chip" data-object="database">Databases</button>
+        </div>
+      </div>
+
+      <div class="filter-group" id="group-location">
+        <h4>Location</h4>
+        <div id="facet-parents" class="facet-list"></div>
+      </div>
+
+      <div class="filter-group" id="group-props">
+        <h4>Properties</h4>
+        <div id="facet-props" class="facet-list"></div>
+      </div>
+
+      <button id="btn-clear" class="link hidden">Clear all filters</button>
+    </aside>
+
+    <section class="results" id="results-pane">
+      <div class="results-meta" id="results-meta"></div>
+      <div id="results"></div>
+      <div id="results-more"></div>
+    </section>
+  </main>
+</div>
+
+<!-- ── Settings drawer ───────────────────────────────────── -->
+<div id="settings" class="drawer hidden">
+  <div class="drawer-backdrop" data-close-settings></div>
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <h2>Settings</h2>
+      <button class="ghost icon" data-close-settings>✕</button>
+    </div>
+
+    <section>
+      <h4>Workspace</h4>
+      <dl class="kv">
+        <dt>Connected as</dt><dd id="set-bot">—</dd>
+        <dt>Workspace</dt><dd id="set-workspace">—</dd>
+        <dt>Pages indexed</dt><dd id="set-count">—</dd>
+        <dt>Last sync</dt><dd id="set-lastsync">—</dd>
+      </dl>
+    </section>
+
+    <section>
+      <h4>Syncing</h4>
+      <p class="muted small">A normal sync only re-reads pages that changed in Notion. A full rebuild
+        re-reads everything from scratch — use it if results look wrong or stale.</p>
+      <div class="row">
+        <button id="btn-sync-2" class="primary">Sync now</button>
+        <button id="btn-rebuild" class="ghost">Full rebuild</button>
+      </div>
+      <div id="sync-history" class="history"></div>
+    </section>
+
+    <section>
+      <h4>Danger zone</h4>
+      <p class="muted small">Removes your saved API key and everything synced to this machine.
+        Your Notion content is not affected.</p>
+      <button id="btn-disconnect" class="danger">Disconnect Notion</button>
+    </section>
+
+    <section id="logout-section" class="hidden">
+      <button id="btn-logout" class="ghost">Sign out</button>
+    </section>
+  </div>
+</div>
+
+<!-- ── Page preview drawer ───────────────────────────────── -->
+<div id="preview" class="drawer hidden">
+  <div class="drawer-backdrop" data-close-preview></div>
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <h2 id="pv-title">—</h2>
+      <button class="ghost icon" data-close-preview>✕</button>
+    </div>
+    <div class="pv-meta" id="pv-meta"></div>
+    <a id="pv-open" class="primary block" target="_blank" rel="noopener">Open in Notion ↗</a>
+    <div id="pv-props" class="pv-props"></div>
+    <pre id="pv-content" class="pv-content"></pre>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

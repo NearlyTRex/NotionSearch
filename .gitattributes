@@ -1,0 +1,24 @@
+# Normalise line endings so a Windows checkout doesn't corrupt files that must
+# stay LF. Without this, git's autocrlf can rewrite shell scripts and the
+# Dockerfile with CRLF, and they fail inside Linux containers with errors as
+# unhelpful as "no such file or directory".
+* text=auto eol=lf
+
+# Must be LF: these run inside Linux containers or under bash.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.dockerignore  text eol=lf
+docker-compose.yml text eol=lf
+
+# Must be CRLF: Windows-native scripts. PowerShell copes with LF, but .cmd and
+# .bat genuinely misbehave without CRLF.
+*.ps1  text eol=crlf
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+
+# Binary — never touch.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.db  binary

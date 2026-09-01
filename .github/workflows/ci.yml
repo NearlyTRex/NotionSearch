@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    services:
+      meilisearch:
+        image: getmeili/meilisearch:v1.11
+        ports:
+          - 7700:7700
+        env:
+          MEILI_MASTER_KEY: testkey1234567890
+          MEILI_NO_ANALYTICS: "true"
+          MEILI_ENV: development
+        options: >-
+          --health-cmd "curl -f http://localhost:7700/health"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      MEILI_URL: http://127.0.0.1:7700
+      MEILI_MASTER_KEY: testkey1234567890
+      # Turn a missing search engine into a failure instead of a silent skip:
+      # a green run that skipped the search tests is not a passing build.
+      REQUIRE_MEILI: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: python -m ruff check app/ tests/
+
+      # Coverage is enforced against the unit tier only. The integration tier
+      # runs the app in a separate process, so it cannot contribute in-process
+      # coverage — it proves behaviour end to end instead.
+      # fail_under = 100 lives in pyproject.toml, so this step fails the build
+      # if a single statement or branch goes untested.
+      - name: Unit tests and 100% coverage gate
+        run: python -m pytest tests/unit -q --cov
+
+      - name: Integration tests
+        run: python -m pytest tests/integration -q
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start the stack
+        working-directory: docker
+        run: docker compose up -d --build
+
+      - name: Wait for it to become healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/health > /dev/null; then
+              echo "healthy after ${i}s"
+              curl -s http://localhost:8080/health
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the stack never became healthy"
+          docker compose -f docker/docker-compose.yml logs
+          exit 1
+
+      - name: Check the UI and its assets are served
+        run: |
+          set -e
+          curl -sf http://localhost:8080/ | grep -q NotionSearch
+          curl -sf -o /dev/null http://localhost:8080/static/app.js
+          curl -sf -o /dev/null http://localhost:8080/static/styles.css
+          echo "UI and assets OK"
+
+      - name: Stop
+        if: always()
+        working-directory: docker
+        run: docker compose down -v
+
+  installer:
+    name: Windows installer compiles
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      # Compile on every change so a broken .iss is caught here rather than at
+      # release time, when it would block shipping.
+      - name: Compile the installer
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+            /DAppVersion=0.0.0-ci packaging\windows\notionsearch.iss
+
+      - name: Confirm it produced an installer
+        run: |
+          $exe = Get-ChildItem dist\*.exe | Select-Object -First 1
+          if (-not $exe) { throw "no installer was produced" }
+          "Built $($exe.Name) ($([math]::Round($exe.Length/1MB,1)) MB)"

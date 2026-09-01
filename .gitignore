@@ -1,0 +1,14 @@
+.venv/
+data/*
+!data/.gitkeep
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+tests/__pycache__/
+*.egg-info/
+build/
+dist/
+.coverage
+coverage.xml
+htmlcov/
