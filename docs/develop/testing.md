@@ -142,6 +142,39 @@ the suggestion would silently blank the location facet.
 
 | Job | What it does |
 |---|---|
-| Tests | ruff, the 100% coverage gate, then the integration tier against a real Meilisearch service |
-| Docker image | Builds the image, starts the stack, checks health and that the UI is served |
-| Windows installer | Compiles the Inno Setup script, so a broken installer is caught here rather than at release |
+| Tests | ruff, shellcheck, the 100% coverage gate, then the integration tier against a real Meilisearch service |
+| Docker image | Builds the image, starts the stack, checks health, the UI, and that the app is not running as root |
+| Windows installer | Compiles the Inno Setup script and silently installs it, so a broken installer is caught here rather than at release |
+
+### Steps live in scripts, not in YAML
+
+Anything with real logic lives in `.github/scripts/`, and the workflow just calls
+it. Only one-liners stay inline.
+
+That is not tidiness for its own sake — it means you can run **exactly what CI
+runs**, locally:
+
+```bash
+.github/scripts/shellcheck-all.sh          # every shell script in the repo
+.github/scripts/wait-for-health.sh          # wait for the stack, dump logs if not
+.github/scripts/check-endpoints.sh          # UI and static assets
+```
+
+```powershell
+.github\scripts\check-version.ps1 -Ref refs/tags/v0.1.0
+.github\scripts\release-notes.ps1 -Version 0.1.0 -Repo NearlyTRex/NotionSearch
+.github\scripts\smoke-test-installer.ps1
+```
+
+It also makes them lintable, and it removes a class of bug that YAML-embedded
+scripts invite: quoting and escaping that is only exercised on a runner. Both
+kinds have already bitten this repo — a PowerShell here-string that silently
+terminated a YAML block, and string concatenation inside a PowerShell array
+literal that split one line into three. Neither was visible until the script was
+run on its own.
+
+### Linting the workflows themselves
+
+```bash
+docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest
+```

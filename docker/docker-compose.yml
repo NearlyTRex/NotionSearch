@@ -24,10 +24,6 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: notionsearch-api
-    # Run as you, not root, so ./data stays readable and backup-able without
-    # sudo. 1000:1000 is the first user on most Linux desktops; override in
-    # .env if `id -u` says otherwise.
-    user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       # Bound to localhost so the app is never exposed to your network.
       - "127.0.0.1:${PORT:-8080}:8080"
@@ -37,6 +33,11 @@ services:
       NOTIONSEARCH_DATA: /data
       APP_PASSWORD: ${APP_PASSWORD:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Left empty on purpose: the entrypoint adopts whoever owns ./data, so
+      # this works on any host without configuration. Set them to force a
+      # specific user.
+      PUID: ${PUID:-}
+      PGID: ${PGID:-}
     volumes:
       # Your synced pages and API key live here. This folder is the backup.
       - ../data:/data

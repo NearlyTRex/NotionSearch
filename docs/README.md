@@ -23,6 +23,7 @@
 - [Development setup](develop/setup.md) — running outside Docker
 - [Testing](develop/testing.md) — the two test tiers and the coverage gate
 - [Releasing](develop/releasing.md) — tagging a version and building the installer
+- [Pinning actions](develop/pinning-actions.md) — why workflows use commit SHAs, and how to update them
 
 ---
 

@@ -79,3 +79,6 @@ docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest
 
 `actionlint` catches expression typos, bad `runs-on` values and YAML mistakes
 that would otherwise only show up after pushing.
+
+New actions must be pinned to a commit SHA — CI enforces it. See
+[Pinning actions](pinning-actions.md).

@@ -213,17 +213,13 @@ $envFile = Join-Path $composeDir ".env"
 if (Test-Path $envFile) {
     Write-Ok "Keeping your existing docker\.env"
 } else {
-    # On Windows the container must run as root: bind mounts from the Windows
-    # filesystem carry no Unix ownership, so the Linux-host default of uid 1000
-    # cannot reliably write to them.
+    # PUID/PGID are deliberately not set: the container adopts the owner of the
+    # data folder, and on Docker Desktop that resolves to root, which is correct
+    # for Windows bind mounts.
     $lines = @(
         "# Created by install-windows.ps1",
         "PORT=$Port",
-        "APP_PASSWORD=$AppPassword",
-        "",
-        "# Windows: bind mounts have no Unix ownership, so run as root.",
-        "PUID=0",
-        "PGID=0"
+        "APP_PASSWORD=$AppPassword"
     )
     $lines | Set-Content -Path $envFile -Encoding ASCII
     Write-Ok "Wrote docker\.env (port $Port)"
