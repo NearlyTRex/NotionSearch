@@ -1,0 +1,51 @@
+version: 2
+
+# Keeps dependencies current so the security workflow has less to find.
+# Grouped so routine bumps arrive as one pull request rather than a dozen.
+
+updates:
+  # Python runtime dependencies. requirements.txt is fully pinned, which is
+  # what makes container builds reproducible — and what makes this necessary,
+  # since nothing moves on its own.
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "deps"
+
+  # Workflow actions. These are pinned to commit SHAs; Dependabot reads the
+  # trailing "# v7.0.1" comment to know the version and updates both together,
+  # so pinning does not leave us stranded on stale actions.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+    groups:
+      actions:
+        patterns: ["*"]
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "ci"
+
+  # The container base image (python:3.12-slim). Base-layer CVEs are the ones
+  # the image scan flags, and a rebuild is the only thing that clears them.
+  - package-ecosystem: docker
+    directory: "/docker"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+    labels: ["dependencies", "docker"]
+    commit-message:
+      prefix: "docker"

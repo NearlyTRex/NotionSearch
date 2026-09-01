@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/NearlyTRex/NotionSearch/actions/workflows/ci.yml/badge.svg)](https://github.com/NearlyTRex/NotionSearch/actions/workflows/ci.yml)
 [![Release](https://github.com/NearlyTRex/NotionSearch/actions/workflows/release.yml/badge.svg)](https://github.com/NearlyTRex/NotionSearch/actions/workflows/release.yml)
+[![Security](https://github.com/NearlyTRex/NotionSearch/actions/workflows/security.yml/badge.svg)](https://github.com/NearlyTRex/NotionSearch/actions/workflows/security.yml)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](docs/develop/testing.md)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 
@@ -62,7 +63,7 @@ Notion key.
 | [Configuration](docs/reference/configuration.md) | Port, password, settings |
 | [HTTP API](docs/reference/api.md) | Every endpoint |
 | [Architecture](docs/reference/architecture.md) | How it works |
-| [Development](docs/develop/setup.md) · [Testing](docs/develop/testing.md) · [Releasing](docs/develop/releasing.md) | Contributing |
+| [Development](docs/develop/setup.md) · [Testing](docs/develop/testing.md) · [Releasing](docs/develop/releasing.md) · [Security](docs/develop/security.md) | Contributing |
 
 Everything is indexed in [docs/README.md](docs/README.md).
 

@@ -24,6 +24,7 @@
 - [Testing](develop/testing.md) — the two test tiers and the coverage gate
 - [Releasing](develop/releasing.md) — tagging a version and building the installer
 - [Pinning actions](develop/pinning-actions.md) — why workflows use commit SHAs, and how to update them
+- [Security checks](develop/security.md) — secret, dependency and image scanning
 
 ---
 
