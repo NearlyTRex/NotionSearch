@@ -1,9 +1,12 @@
 name: Release
 
-# Publishing a release is a two-step affair:
+# Publishing is two commands:
 #   git tag v0.1.0 && git push origin v0.1.0
 # That builds the Windows installer, smoke-tests it, and attaches it to a
-# GitHub Release. Run it by hand from the Actions tab to test without tagging.
+# GitHub Release. Run it by hand from the Actions tab to rehearse without
+# tagging.
+#
+# Steps with real logic live in .github/scripts/ so they can be run locally.
 
 on:
   push:
@@ -25,43 +28,22 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      # tomllib, used to read the version, needs Python 3.11+.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
+      # Refuses to build when the tag and pyproject.toml disagree, so an
+      # installer can never ship with a version it does not actually declare.
       - name: Work out the version
         id: version
         shell: pwsh
         run: |
-          # tomllib needs Python 3.11+, hence the pinned setup-python above.
-          $declared = python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
-          if ($LASTEXITCODE -ne 0) { throw "could not read the version from pyproject.toml" }
-          $declared = $declared.Trim()
-
-          if ($env:GITHUB_REF -like "refs/tags/v*") {
-            $tag = $env:GITHUB_REF -replace "^refs/tags/v", ""
-
-            # Refuse to ship an installer whose version disagrees with the
-            # package metadata: the tag, the filename and what the app reports
-            # about itself all have to be the same number.
-            if ($tag -ne $declared) {
-              Write-Host "::error::Tag v$tag does not match pyproject.toml version $declared."
-              Write-Host "::error::Fix it with one of:"
-              Write-Host "::error::  - set version = `"$tag`" in pyproject.toml, commit, retag; or"
-              Write-Host "::error::  - delete the tag and retag as v$declared"
-              exit 1
-            }
-            $v = $tag
-            "Tag v$tag matches pyproject.toml. Building $v"
-          } else {
-            # A manual run is for rehearsing a build, so any version is allowed.
-            $v = "${{ github.event.inputs.version }}"
-            "Manual build of $v (pyproject.toml declares $declared)"
-          }
-
-          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          .github\scripts\check-version.ps1 `
+            -Ref "$env:GITHUB_REF" `
+            -FallbackVersion "${{ github.event.inputs.version }}"
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
@@ -74,57 +56,11 @@ jobs:
             packaging\windows\notionsearch.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
 
-      # A silent install proves the installer actually works, rather than merely
-      # compiling. Catching a broken one here is much cheaper than shipping it.
+      # Proves the installer works rather than merely compiling — this is the
+      # first thing a user would hit.
       - name: Smoke-test the installer
         shell: pwsh
-        run: |
-          $exe = (Get-ChildItem dist\*.exe | Select-Object -First 1).FullName
-          $target = "$env:RUNNER_TEMP\NotionSearchTest"
-
-          Write-Host "Installing silently to $target"
-          $p = Start-Process -FilePath $exe -Wait -PassThru -ArgumentList `
-            "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=$target","/LOG=$env:RUNNER_TEMP\install.log"
-          if ($p.ExitCode -ne 0) {
-            Get-Content "$env:RUNNER_TEMP\install.log" -Tail 40
-            throw "installer exited with $($p.ExitCode)"
-          }
-
-          # Everything the app needs at runtime must have landed.
-          $required = @(
-            "docker\docker-compose.yml",
-            "docker\Dockerfile",
-            "app\main.py",
-            "web\index.html",
-            "scripts\start-windows.cmd",
-            "scripts\stop-windows.cmd"
-          )
-          foreach ($f in $required) {
-            if (-not (Test-Path (Join-Path $target $f))) { throw "missing from install: $f" }
-          }
-
-          # The data folder must exist and be writable, or the container's bind
-          # mount has nowhere to put the database.
-          $data = Join-Path $target "data"
-          if (-not (Test-Path $data)) { throw "data folder was not created" }
-          "probe" | Set-Content (Join-Path $data "probe.txt")
-
-          # A developer's own .env must never be packaged: it can hold a password.
-          if (Test-Path (Join-Path $target "docker\.env")) {
-            throw "docker\.env was packaged into the installer"
-          }
-          if (Get-ChildItem $target -Recurse -Include "*.pyc","__pycache__" -Force -EA SilentlyContinue) {
-            throw "build cruft was packaged into the installer"
-          }
-
-          Write-Host "Installer smoke test passed"
-
-      - name: Uninstall again
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          $u = Get-ChildItem "$env:RUNNER_TEMP\NotionSearchTest\unins*.exe" -EA SilentlyContinue | Select-Object -First 1
-          if ($u) { Start-Process $u.FullName -Wait -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES" }
+        run: .github\scripts\smoke-test-installer.ps1
 
       - name: Checksum
         shell: pwsh
@@ -134,7 +70,7 @@ jobs:
           "$hash  $($exe.Name)" | Out-File -FilePath "dist\SHA256SUMS.txt" -Encoding ascii
           Write-Host "$hash  $($exe.Name)"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-installer
           path: |
@@ -148,41 +84,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag     = $env:GITHUB_REF -replace "^refs/tags/", ""
-          $version = "${{ steps.version.outputs.version }}"
-          $repo    = "${{ github.repository }}"
-
-          # Built as an array of single-quoted strings. A here-string would have
-          # to start at column 0, which terminates this YAML block scalar; and
-          # PowerShell treats a backtick literally inside single quotes, so
-          # markdown code spans survive without escaping.
-          $notes = @(
-            '## Installing on Windows',
-            '',
-            '1. Download `NotionSearch-' + $version + '-Setup.exe` below',
-            '2. Run it. Windows SmartScreen warns that the publisher is unknown,',
-            '   because the installer is not code-signed. Choose **More info**,',
-            '   then **Run anyway**.',
-            '3. Launch **NotionSearch** from the Start Menu',
-            '',
-            'You also need [Docker Desktop](https://www.docker.com/products/docker-desktop/).',
-            'If it is missing, the shortcut says so, and `scripts\install-windows.ps1`',
-            'installs it for you.',
-            '',
-            '## Installing on Linux or macOS',
-            '',
-            '```bash',
-            'git clone https://github.com/' + $repo + '.git',
-            'cd NotionSearch/docker',
-            'docker compose up -d',
-            '```',
-            '',
-            'Then open <http://localhost:8080>.',
-            '',
-            'Verify your download against `SHA256SUMS.txt`.'
-          )
+          $tag = $env:GITHUB_REF -replace "^refs/tags/", ""
           $notesFile = Join-Path $env:RUNNER_TEMP "notes.md"
-          $notes | Set-Content -Path $notesFile -Encoding utf8
+
+          .github\scripts\release-notes.ps1 `
+            -Version "${{ steps.version.outputs.version }}" `
+            -Repo "${{ github.repository }}" `
+            -OutFile $notesFile
 
           $assets = @((Get-ChildItem dist\*.exe).FullName) + @("dist\SHA256SUMS.txt")
           gh release create $tag @assets --title "NotionSearch $tag" --notes-file $notesFile

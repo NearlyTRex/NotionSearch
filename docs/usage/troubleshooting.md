@@ -84,22 +84,27 @@ They disappear on the next sync. NotionSearch removes anything Notion stops
 returning, which covers both deleted pages and pages you've unshared from the
 integration.
 
-## Permission errors on the data folder
+## "unable to open database file"
 
-The container runs as user `1000:1000`, which is the first account on most Linux
-desktops. If `id -u` gives you something else, set it in `docker/.env`:
-
-```bash
-echo "PUID=$(id -u)" >> docker/.env
-echo "PGID=$(id -g)" >> docker/.env
-docker compose up -d
-```
-
-If `data/` ended up owned by root from an earlier run:
+The container couldn't write to the `data/` folder. It normally runs as whoever
+owns that folder, so this usually means the folder is missing or owned by someone
+unexpected.
 
 ```bash
-sudo chown -R $(id -u):$(id -g) data/
+ls -lan data/            # who owns it?
+sudo chown -R "$(id -u):$(id -g)" data/
+cd docker && docker compose up -d
 ```
+
+If `data/` doesn't exist at all, recreate it and restart — it ships with the
+project, so a stray `rm -rf` is the usual cause:
+
+```bash
+mkdir -p data && cd docker && docker compose up -d
+```
+
+To force a specific user instead, set `PUID` and `PGID` in `docker/.env` — see
+[Configuration](../reference/configuration.md).
 
 ## Starting completely fresh
 

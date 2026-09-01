@@ -16,7 +16,7 @@ docker compose up -d
 | `PORT` | `8080` | The address becomes `localhost:PORT` |
 | `APP_PASSWORD` | *(empty)* | Blank means no login. Set it to require a password |
 | `MEILI_MASTER_KEY` | `notionsearch_local_key_change_me` | Internal search engine key |
-| `PUID` / `PGID` | `1000` | The user the container runs as |
+| `PUID` / `PGID` | *(auto)* | Force the user the container runs as |
 | `LOG_LEVEL` | `INFO` | `DEBUG` for verbose logs |
 
 ### PORT
@@ -46,18 +46,26 @@ database. Changing it signs everyone out.
 
 ### PUID / PGID
 
-Which user the container runs as. This keeps `data/` owned by you rather than root,
-so you can back it up without `sudo`.
+**You normally don't need these.** On startup the container looks at who owns the
+`data/` folder and runs as that user, so the database files stay owned by you and
+you can back them up without `sudo` — on any machine, with no configuration.
 
-`1000` is the first user account on most Linux desktops and is almost always
-correct. Check with:
+That matters because a hard-coded id breaks the moment yours isn't 1000: a second
+account, some distributions, or a CI runner. The symptom is the app failing to
+start with `unable to open database file`.
+
+Set them only to force a specific user:
 
 ```bash
-id -u    # PUID
-id -g    # PGID
+PUID=1002
+PGID=1002
 ```
 
-Not used on Docker Desktop for Mac or Windows.
+Check yours with `id -u` and `id -g`.
+
+On Docker Desktop for Mac and Windows the mount is reported as root and Docker
+handles permissions itself, so the container stays root there. That is correct
+and needs no configuration.
 
 ### MEILI_MASTER_KEY
 
