@@ -2,7 +2,26 @@
 
 Two commands, then everything else happens in your browser.
 
-## 1. Start it
+## Windows: one file
+
+Download `NotionSearch-<version>-Setup.exe` from the
+[latest release](https://github.com/NearlyTRex/NotionSearch/releases) and run it.
+
+The installer checks what your PC needs and fills in the gaps:
+
+- If **Docker Desktop** is missing it downloads and installs it for you. Windows
+  will ask your permission part way through, and it may ask you to restart
+  afterwards.
+- If **hardware virtualisation** is switched off in your BIOS/UEFI it says so,
+  because Docker cannot run without it and no installer can turn it on for you.
+
+Then launch **NotionSearch** from the Start Menu and skip to
+[step 2](#2-connect-notion).
+
+> Windows SmartScreen will warn that the publisher is unknown, because the
+> installer is not code-signed. Choose **More info** → **Run anyway**.
+
+## 1. Start it (Linux, macOS, or from source)
 
 ```bash
 git clone https://github.com/NearlyTRex/NotionSearch.git
@@ -25,36 +44,52 @@ If you don't have Docker yet, see [Installing Docker](../install/installing-dock
 
 The page walks you through this, and it takes about two minutes.
 
-### Create an integration
+### Create a connection
 
-Go to [notion.so/my-integrations](https://www.notion.so/my-integrations) and click
-**New integration**. Give it a name like *Search*, choose your workspace, and make
-sure **Read content** is enabled under capabilities.
+In Notion, open **Settings** → **Developer tools** → the **Connections** tab.
+(<https://www.notion.so/my-integrations> also lands there.)
 
-### Copy the secret
+Click **+ New connection**, name it something like *Search*, choose your workspace,
+and make sure it is allowed to **read content**.
 
-On the integration's page find **Internal Integration Secret**, click **Show**, then
-**Copy**. It starts with `ntn_` or `secret_`. Paste it into the setup page.
+For **Auth type**, choose **Access token** — the non-OAuth option. OAuth is for
+apps that many different people install; this one only needs to reach your own
+workspace.
 
-The key is checked against Notion before it is saved, so you'll know immediately if
-it's wrong.
+### Copy its access token
 
-### Share your pages with it
+Open the connection you just created and copy its **access token**. It starts with
+`ntn_`. Paste it into the setup page.
 
-**This is the step almost everyone misses.** Creating the integration is not enough —
-Notion shows it nothing until you explicitly share pages with it.
+The token is checked against Notion before it is saved, so you'll know immediately
+if it's wrong.
+
+> **Not the "Personal access tokens" tab.** It sits directly beside
+> **Connections** and sounds like the same thing, but it is a different mechanism
+> and will not work here.
+
+### Connect your pages to it
+
+**This is the step almost everyone misses, and nothing works without it.**
+Creating the connection gives it access to *nothing*. Notion shows it only the
+pages you connect to it, one time each.
 
 In Notion:
 
-1. Open a top-level page
+1. Open a page
 2. Click the **•••** menu at the top right
-3. Choose **Connections** → **Connect to**
-4. Pick your integration
+3. Choose **Connections** (some versions say **Add connections**)
+4. Pick your connection and confirm
 
-Everything nested inside that page comes along automatically, so sharing a handful
-of top-level pages usually covers your whole workspace.
+Everything nested inside that page comes along automatically, so connecting a
+handful of top-level pages usually covers your whole workspace.
+
+**Pages under "Private" have to be connected individually** — owning them is not
+enough.
 
 > If the app connects successfully but finds nothing, this is almost always why.
+> Run `python3 scripts/notion-doctor.py` to confirm: it reports exactly how many
+> pages Notion is willing to share.
 
 ## 3. Sync
 

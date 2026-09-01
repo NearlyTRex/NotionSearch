@@ -42,8 +42,10 @@ $logFile = Join-Path (Split-Path -Parent $TargetDir) "notionsearch-install.log"
 if (Test-Path $TargetDir) { Remove-Item $TargetDir -Recurse -Force }
 
 Write-Host "Installing $(Split-Path -Leaf $InstallerPath) to $TargetDir"
+$started = Get-Date
 $proc = Start-Process -FilePath $InstallerPath -Wait -PassThru -ArgumentList `
     "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$TargetDir", "/LOG=$logFile"
+$elapsed = (Get-Date) - $started
 
 if ($proc.ExitCode -ne 0) {
     if (Test-Path $logFile) { Get-Content $logFile -Tail 40 }
@@ -96,6 +98,21 @@ if (Test-Path $data) {
     } catch {
         Assert-Ok "data folder is writable" $false
     }
+}
+
+# The installer can download and install Docker Desktop, but a silent install
+# must never do that unasked: it is a very large download, and an unattended
+# run has nobody to approve the elevation prompt. These assert the
+# WizardSilent() guard in the .iss actually holds.
+Assert-Ok "silent install did not download Docker Desktop" `
+    (-not (Get-ChildItem $env:TEMP -Recurse -Filter "DockerDesktopInstaller.exe" `
+           -ErrorAction SilentlyContinue))
+Assert-Ok "silent install finished promptly (no large download)" `
+    ($elapsed.TotalMinutes -lt 3)
+if (Test-Path $logFile) {
+    $log = Get-Content $logFile -Raw
+    Assert-Ok "installer log shows no download attempt" `
+        ($log -notmatch "desktop\.docker\.com")
 }
 
 # A developer's own .env must never be packaged: it can hold a password.

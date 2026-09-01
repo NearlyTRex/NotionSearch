@@ -7,6 +7,9 @@
 ; %LOCALAPPDATA%\Programs\NotionSearch. That location matters: the app
 ; bind-mounts its own data folder into a container, so it has to be somewhere
 ; the user can actually write. Program Files would be read-only for them.
+;
+; The installer also detects, downloads and installs Docker Desktop, so someone
+; on a brand new PC only has to run this one file.
 
 #ifndef AppVersion
   #define AppVersion "0.0.0-dev"
@@ -15,6 +18,11 @@
 #define AppName      "NotionSearch"
 #define AppPublisher "NotionSearch"
 #define AppURL       "https://github.com/NearlyTRex/NotionSearch"
+
+; Docker's own stable download URL. There is no published checksum tracking the
+; current release, so the download is verified by its Authenticode signature
+; instead - see VerifySignedByDocker below.
+#define DockerUrl "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
 
 [Setup]
 AppId={{8F3A5C21-9B4E-4D7A-A1E6-2C8B7F0D5A93}
@@ -27,6 +35,8 @@ AppSupportURL={#AppURL}/issues
 AppUpdatesURL={#AppURL}/releases
 
 ; Per-user install: no UAC prompt, and the data folder stays writable.
+; Installing Docker Desktop does need administrator rights, so that one step
+; asks for elevation on its own.
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 DefaultDirName={autopf}\{#AppName}
@@ -40,7 +50,9 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 
-; Windows 10 1809 is the floor for Docker Desktop / WSL2.
+; Windows 10 1809 is the floor for Docker Desktop and WSL2. These guards are
+; unconditional on purpose: an installer that runs where Docker cannot is worse
+; than one that declines politely.
 MinVersion=10.0.17763
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -53,6 +65,11 @@ SetupLogging=yes
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
+; Offered only when Docker Desktop is genuinely absent, and checked by default
+; because nothing works without it.
+Name: "installdocker"; Description: "Download and install &Docker Desktop (required)"; \
+    GroupDescription: "Prerequisites:"; Check: NeedsDockerDesktop
+
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; \
     GroupDescription: "Shortcuts:"
 Name: "startupicon"; Description: "Start {#AppName} when I sign in"; \
@@ -109,38 +126,245 @@ Type: filesandordirs; Name: "{app}\data"
 
 [Code]
 var
-  DockerMissingPage: TOutputMsgMemoWizardPage;
+  DownloadPage: TDownloadWizardPage;
+  PrereqPage: TOutputMsgMemoWizardPage;
+  DockerWasInstalled: Boolean;
+  RebootNeeded: Boolean;
 
-function DockerInstalled(): Boolean;
+{ ---------- detection ---------- }
+
+function DockerDesktopInstalled(): Boolean;
 begin
-  { Docker Desktop's own folder is a more reliable signal than PATH, which
-    isn't refreshed inside a running installer process. }
-  Result := DirExists(ExpandConstant('{commonpf}\Docker\Docker')) or
-            FileExists(ExpandConstant('{commonpf}\Docker\Docker\Docker Desktop.exe'));
+  { The executable is a more reliable signal than PATH, which is not refreshed
+    inside a running installer process. }
+  Result := FileExists(ExpandConstant('{commonpf}\Docker\Docker\Docker Desktop.exe'))
+         or FileExists(ExpandConstant('{commonpf}\Docker\Docker\resources\bin\docker.exe'))
+         or RegKeyExists(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Docker Desktop');
+end;
+
+function NeedsDockerDesktop(): Boolean;
+begin
+  Result := not DockerDesktopInstalled();
+end;
+
+{ Hardware virtualisation. Docker Desktop cannot run without it, and it is
+  disabled in firmware on a surprising number of machines. We can detect that
+  but not fix it, so this only ever warns. }
+function VirtualizationLikelyEnabled(): Boolean;
+var
+  Locator, Services, Items, Item: Variant;
+begin
+  { Assume fine unless WMI positively says otherwise: a false alarm here would
+    frighten someone off a machine that works perfectly well. }
+  Result := True;
+  try
+    Locator := CreateOleObject('WbemScripting.SWbemLocator');
+    Services := Locator.ConnectServer('localhost', 'root\CIMV2');
+    Items := Services.ExecQuery('SELECT VirtualizationFirmwareEnabled FROM Win32_Processor');
+    { ItemIndex is an Inno extension for SWbemObjectSet; Pascal Script has no
+      IEnumVariant, so the usual COM enumeration is not available here. }
+    if Items.Count > 0 then
+    begin
+      Item := Items.ItemIndex(0);
+      if not VarIsNull(Item.VirtualizationFirmwareEnabled) then
+        Result := Item.VirtualizationFirmwareEnabled;
+    end;
+  except
+    Result := True;
+  end;
+end;
+
+{ ---------- Docker Desktop install ---------- }
+
+{ Verify the download really came from Docker before running it. Docker
+  publishes no checksum tracking the current release, so the Authenticode
+  signature is the available guarantee - and it is a strong one. }
+function VerifySignedByDocker(const FileName: String): Boolean;
+var
+  ResultCode: Integer;
+  Command: String;
+begin
+  Command :=
+    '$ErrorActionPreference=''Stop'';' +
+    '$s = Get-AuthenticodeSignature -LiteralPath ''' + FileName + ''';' +
+    'if ($s.Status -ne ''Valid'') { exit 2 };' +
+    'if ($s.SignerCertificate.Subject -notmatch ''Docker Inc'') { exit 3 };' +
+    'exit 0';
+
+  Result := Exec('powershell.exe',
+                 '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + Command + '"',
+                 '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+            and (ResultCode = 0);
+
+  if not Result then
+    Log('Authenticode verification failed for ' + FileName +
+        ' (exit ' + IntToStr(ResultCode) + ')');
+end;
+
+function InstallDockerDesktop(const Installer: String): Boolean;
+var
+  ResultCode: Integer;
+begin
+  { Docker Desktop needs administrator rights, so this one step asks for
+    elevation even though the rest of the install does not. }
+  Result := ShellExec('runas', Installer,
+                      'install --quiet --accept-license --backend=wsl-2',
+                      '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
+
+  if not Result then
+  begin
+    Log('Could not launch the Docker Desktop installer (elevation refused?)');
+    Exit;
+  end;
+
+  { 3010 means installed successfully but a restart is required. }
+  if ResultCode = 3010 then
+  begin
+    RebootNeeded := True;
+    Log('Docker Desktop installed; a restart is required.');
+  end
+  else if ResultCode <> 0 then
+  begin
+    Log('Docker Desktop installer exited with ' + IntToStr(ResultCode));
+    Result := False;
+    Exit;
+  end;
+
+  DockerWasInstalled := True;
+end;
+
+{ ---------- wizard ---------- }
+
+function OnDownloadProgress(const Url, FileName: String;
+                            const Progress, ProgressMax: Int64): Boolean;
+begin
+  if ProgressMax <> 0 then
+    Log(Format('Downloaded %d of %d bytes', [Progress, ProgressMax]));
+  Result := True;
 end;
 
 procedure InitializeWizard();
+var
+  Summary: String;
 begin
-  DockerMissingPage := CreateOutputMsgMemoPage(
-    wpSelectTasks,
-    'Docker Desktop is required',
-    'NotionSearch runs inside Docker.',
-    'Docker Desktop was not found on this computer:',
-    'NotionSearch uses Docker Desktop to run its search engine.' + #13#10#13#10 +
-    'You can continue with this installation now. Afterwards, install Docker' + #13#10 +
-    'Desktop from:' + #13#10#13#10 +
-    '    https://www.docker.com/products/docker-desktop/' + #13#10#13#10 +
-    'Or run this from the Start Menu folder once installation finishes:' + #13#10#13#10 +
-    '    scripts\install-windows.ps1' + #13#10#13#10 +
-    'That script installs WSL2 and Docker Desktop for you.' + #13#10#13#10 +
-    'NotionSearch will not start until Docker Desktop is installed and running.'
-  );
+  DownloadPage := CreateDownloadPage(
+    SetupMessage(msgWizardPreparing), SetupMessage(msgPreparingDesc),
+    @OnDownloadProgress);
+
+  Summary :=
+    'NotionSearch runs inside Docker Desktop, which is free for personal use.' + #13#10#13#10;
+
+  if DockerDesktopInstalled() then
+    Summary := Summary + '  [ok]  Docker Desktop is already installed.' + #13#10
+  else
+    Summary := Summary +
+      '  [  ]  Docker Desktop is not installed.' + #13#10 +
+      '        This installer can download and install it for you.' + #13#10 +
+      '        It is a large download, so allow several minutes, and' + #13#10 +
+      '        Windows will ask your permission part way through.' + #13#10;
+
+  if not VirtualizationLikelyEnabled() then
+    Summary := Summary + #13#10 +
+      '  [!]   Hardware virtualisation appears to be turned off.' + #13#10 +
+      '        Docker cannot run without it. It is switched on in your' + #13#10 +
+      '        computer''s BIOS or UEFI settings, usually listed as' + #13#10 +
+      '        "Intel VT-x", "AMD-V" or "SVM Mode".' + #13#10 +
+      '        Installation will continue, but Docker will not start' + #13#10 +
+      '        until that is enabled.' + #13#10;
+
+  Summary := Summary + #13#10 +
+    'Nothing here sends your Notion content anywhere. It all stays on this' + #13#10 +
+    'computer.';
+
+  PrereqPage := CreateOutputMsgMemoPage(wpLicense,
+    'Before we start', 'What NotionSearch needs',
+    'Please read this, then continue:', Summary);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Installer: String;
+begin
+  Result := '';
+
+  { A silent install must not pull down hundreds of megabytes unasked. This is
+    also what stops the CI smoke test downloading Docker Desktop every run. }
+  if WizardSilent() then
+    Exit;
+
+  if not WizardIsTaskSelected('installdocker') then
+    Exit;
+
+  if DockerDesktopInstalled() then
+    Exit;
+
+  DownloadPage.Clear();
+  DownloadPage.Add('{#DockerUrl}', 'DockerDesktopInstaller.exe', '');
+  DownloadPage.Show();
+  try
+    try
+      DownloadPage.Download();
+    except
+      Result := 'Could not download Docker Desktop: ' + GetExceptionMessage + #13#10#13#10 +
+                'You can install it yourself from' + #13#10 +
+                'https://www.docker.com/products/docker-desktop/' + #13#10 +
+                'and then start NotionSearch from the Start Menu.';
+      Exit;
+    end;
+
+    Installer := ExpandConstant('{tmp}\DockerDesktopInstaller.exe');
+
+    if not VerifySignedByDocker(Installer) then
+    begin
+      Result := 'The downloaded Docker Desktop installer is not correctly signed ' +
+                'by Docker Inc, so it was not run.' + #13#10#13#10 +
+                'That can mean the download was corrupted or tampered with. ' +
+                'Please install Docker Desktop yourself from' + #13#10 +
+                'https://www.docker.com/products/docker-desktop/';
+      Exit;
+    end;
+
+    DownloadPage.SetText('Installing Docker Desktop...',
+                         'This takes a few minutes. Windows will ask for permission.');
+
+    if not InstallDockerDesktop(Installer) then
+    begin
+      Result := 'Docker Desktop could not be installed automatically.' + #13#10#13#10 +
+                'NotionSearch itself will still be installed. To finish, install ' +
+                'Docker Desktop from' + #13#10 +
+                'https://www.docker.com/products/docker-desktop/' + #13#10 +
+                'and then start NotionSearch from the Start Menu.';
+      Exit;
+    end;
+  finally
+    DownloadPage.Hide();
+  end;
+
+  NeedsRestart := RebootNeeded;
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
   Result := False;
-  { Only warn about Docker when it is genuinely absent. }
-  if Assigned(DockerMissingPage) and (PageID = DockerMissingPage.ID) then
-    Result := DockerInstalled();
+  { Nothing useful to say when Docker is present and virtualisation is fine. }
+  if Assigned(PrereqPage) and (PageID = PrereqPage.ID) then
+    Result := DockerDesktopInstalled() and VirtualizationLikelyEnabled();
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    if DockerWasInstalled and RebootNeeded then
+      SuppressibleMsgBox(
+        'Docker Desktop was installed and needs a restart to finish.' + #13#10#13#10 +
+        'Restart your computer, then open NotionSearch from the Start Menu.',
+        mbInformation, MB_OK, IDOK)
+    else if DockerWasInstalled then
+      SuppressibleMsgBox(
+        'Docker Desktop was installed.' + #13#10#13#10 +
+        'The first time NotionSearch starts it waits for Docker to be ready, ' +
+        'which can take a minute.',
+        mbInformation, MB_OK, IDOK);
+  end;
 end;

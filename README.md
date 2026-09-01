@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/NearlyTRex/NotionSearch/actions/workflows/ci.yml/badge.svg)](https://github.com/NearlyTRex/NotionSearch/actions/workflows/ci.yml)
 [![Release](https://github.com/NearlyTRex/NotionSearch/actions/workflows/release.yml/badge.svg)](https://github.com/NearlyTRex/NotionSearch/actions/workflows/release.yml)
+[![Security](https://github.com/NearlyTRex/NotionSearch/actions/workflows/security.yml/badge.svg)](https://github.com/NearlyTRex/NotionSearch/actions/workflows/security.yml)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](docs/develop/testing.md)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 
@@ -33,9 +34,10 @@ Open **<http://localhost:8080>** and follow the three steps it shows you.
 That's the whole install. The first sync starts on its own once you paste your
 Notion key.
 
-> **The step everyone misses:** creating a Notion integration isn't enough — you
-> have to share pages with it. In Notion: **•••** → **Connections** → **Connect to**
-> → your integration. Nested pages come along automatically.
+> **The step everyone misses:** creating a Notion connection isn't enough — you
+> have to connect your pages to it. In Notion: **•••** → **Connections** → pick your
+> connection. Nested pages come along automatically, but pages under **Private**
+> must each be connected.
 > Full walkthrough: [Getting started](docs/usage/getting-started.md).
 
 ## What it does
@@ -61,7 +63,7 @@ Notion key.
 | [Configuration](docs/reference/configuration.md) | Port, password, settings |
 | [HTTP API](docs/reference/api.md) | Every endpoint |
 | [Architecture](docs/reference/architecture.md) | How it works |
-| [Development](docs/develop/setup.md) · [Testing](docs/develop/testing.md) · [Releasing](docs/develop/releasing.md) | Contributing |
+| [Development](docs/develop/setup.md) · [Testing](docs/develop/testing.md) · [Releasing](docs/develop/releasing.md) · [Security](docs/develop/security.md) | Contributing |
 
 Everything is indexed in [docs/README.md](docs/README.md).
 

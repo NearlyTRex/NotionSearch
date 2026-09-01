@@ -1,0 +1,101 @@
+name: Security
+
+# Supply-chain and secret checks. Kept separate from ci.yml so a scanner going
+# red on something outside your control never blocks a code review, and so the
+# scheduled run catches vulnerabilities disclosed after a commit landed.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Mondays, 06:17 UTC. Off the hour, because everything scheduled on the hour
+    # queues behind everyone else's jobs.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # gitleaks scans history, not just the current tree: a secret that
+          # was committed and later deleted is still published.
+          fetch-depth: 0
+
+      # Run the image directly rather than an action, so there is no extra
+      # third-party action in the supply chain of the tool checking our supply
+      # chain. Config and allowlist live in .gitleaks.toml.
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" \
+            zricethezav/gitleaks:latest \
+            detect --source=/repo --redact --no-banner \
+            --config=/repo/.gitleaks.toml
+
+      # Complements gitleaks: it scans contents, this checks that whole
+      # categories of file are never committed at all.
+      - name: No credential-bearing files are tracked
+        run: .github/scripts/check-no-secrets.sh
+
+  dependencies:
+    name: Dependency CVEs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      # requirements.txt is fully pinned, so this is exact rather than
+      # a guess at what would be resolved.
+      - name: Audit Python dependencies
+        run: pip-audit --requirement requirements.txt --strict --progress-spinner=off
+
+  image:
+    name: Container image CVEs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the image
+        run: docker build -f docker/Dockerfile -t notionsearch-api:scan .
+
+      # Saved to a tarball rather than mounting the docker socket into the
+      # scanner: it needs to read the image, not control the daemon.
+      - name: Export the image
+        run: docker save notionsearch-api:scan -o /tmp/image.tar
+
+      # --ignore-unfixed keeps this actionable. A CVE with no available fix
+      # is not something a rebuild can resolve, and failing on it only teaches
+      # people to ignore the job.
+      - name: Scan with Trivy
+        run: |
+          docker run --rm -v /tmp:/tmp aquasec/trivy:latest image \
+            --input /tmp/image.tar \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            --no-progress \
+            --scanners vuln

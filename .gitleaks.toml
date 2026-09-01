@@ -1,0 +1,53 @@
+# gitleaks configuration.
+#
+# The default rules are kept in full; this only adds an allowlist for values
+# that are deliberately fake. The allowlist is written as explicit regexes
+# rather than "ignore the tests directory", because a real secret pasted into a
+# test or a doc is exactly the kind of mistake this is meant to catch.
+#
+# Run locally:
+#   docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+#       detect --source=/repo --redact -c /repo/.gitleaks.toml
+
+[extend]
+useDefault = true
+
+# gitleaks ships no rule for Notion credentials, and a Notion token is the one
+# secret this project actually handles — so the default rules would miss the
+# leak that matters most here. Verified: a realistic ntn_ token is not caught
+# without this.
+[[rules]]
+id = "notion-integration-token"
+description = "Notion integration access token"
+# Real tokens are 50 characters: ntn_ plus 46. The 40+ floor keeps the short
+# obviously-fake values used in tests from matching.
+regex = '''\bntn_[A-Za-z0-9]{40,}\b'''
+keywords = ["ntn_"]
+
+[[rules]]
+id = "notion-legacy-secret"
+description = "Notion integration secret (pre-2024 format)"
+regex = '''\bsecret_[A-Za-z0-9]{40,}\b'''
+keywords = ["secret_"]
+
+[allowlist]
+description = "Known-fake values used by the tests, CI and documentation"
+
+regexes = [
+  # Meilisearch keys used by the test suite and CI. Meilisearch requires a key
+  # of at least 16 bytes, which is why these look like credentials.
+  '''testkey1234567890''',
+  '''dev_master_key_at_least_16_bytes''',
+  # The documented default for a local install. It never leaves the machine,
+  # and .env.example tells people to change it.
+  '''notionsearch_local_key_change_me''',
+  # Fake Notion tokens. Real ones are 50 characters; these are obviously not.
+  '''ntn_(valid_key_123|bad_key_123|integration_test_key|test|x)\b''',
+  # Sample password in the auth tests.
+  '''hunter2''',
+]
+
+paths = [
+  # Lock files and vendored trees would only ever produce noise.
+  '''(.*?)(package-lock\.json|poetry\.lock|uv\.lock)$''',
+]

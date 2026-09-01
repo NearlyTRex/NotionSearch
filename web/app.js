@@ -15,6 +15,7 @@ const state = {
   total: 0,
   loading: false,
   syncTimer: null,
+  syncHint: null,
 };
 
 /* ── helpers ─────────────────────────────────────────── */
@@ -95,6 +96,7 @@ async function boot() {
   $('logout-section').classList.toggle('hidden', !status.auth_required);
   applyStatus(status);
 
+  state.syncHint = status.sync?.hint || null;
   if (status.sync?.running) startSyncPolling();
   else if (!status.last_sync_at) {
     // Freshly connected but never synced: get her straight to content.
@@ -201,8 +203,11 @@ function renderResults(data, reset) {
     list.innerHTML = state.q
       ? `<div class="empty"><h3>Nothing found for “${esc(state.q)}”</h3>
            <p class="muted">Try fewer words, or clear the filters on the left.</p></div>`
-      : `<div class="empty"><h3>No pages synced yet</h3>
-           <p class="muted">Press <b>Sync</b> above to pull your Notion content in.</p></div>`;
+      : state.syncHint
+        ? `<div class="empty"><h3>Notion returned no pages</h3>
+             <p class="muted">${esc(state.syncHint)}</p></div>`
+        : `<div class="empty"><h3>No pages synced yet</h3>
+             <p class="muted">Press <b>Sync</b> above to pull your Notion content in.</p></div>`;
     $('results-more').innerHTML = '';
     return;
   }
@@ -416,7 +421,15 @@ async function pollSync() {
   setTimeout(() => $('syncbar').classList.add('hidden'), 2200);
 
   if (s.status === 'ok') {
-    toast(`Sync complete — ${s.updated} page${s.updated === 1 ? '' : 's'} updated`);
+    if (s.hint) {
+      // A sync that finds nothing is the commonest setup problem and looks
+      // identical to success; say what to do about it.
+      state.syncHint = s.hint;
+      toast('Sync finished, but Notion returned no pages', true);
+    } else {
+      state.syncHint = null;
+      toast(`Sync complete — ${s.updated} page${s.updated === 1 ? '' : 's'} updated`);
+    }
     search(true);
   } else if (s.status === 'error') {
     toast(s.error || 'Sync failed', true);

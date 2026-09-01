@@ -33,30 +33,43 @@
 
     <ol class="steps">
       <li>
-        <h3>Create an integration</h3>
-        <p>Open <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener">notion.so/my-integrations</a>
-           and click <b>New integration</b>. Give it a name like <i>Search</i>, pick your workspace,
-           and make sure its capabilities include <b>Read content</b>.</p>
+        <h3>Create a connection</h3>
+        <p>In Notion, go to <b>Settings</b> → <b>Developer tools</b> → the <b>Connections</b> tab
+           (<a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener">notion.so/my-integrations</a>
+           also lands there). Click <b>+ New connection</b>, name it something like <i>Search</i>,
+           pick your workspace, and make sure it can <b>read content</b>.</p>
+        <p class="muted small">Choose the <b>Access token</b> auth type — the non-OAuth one.
+           OAuth is for apps that many people install; this only needs to reach your own workspace.</p>
       </li>
       <li>
-        <h3>Copy the secret</h3>
-        <p>On the integration's page, find <b>Internal Integration Secret</b> and click <b>Show</b>, then <b>Copy</b>.
-           It starts with <code>ntn_</code> or <code>secret_</code>. Paste it below.</p>
-      </li>
-      <li>
-        <h3>Share your pages with it</h3>
+        <h3>Copy its access token</h3>
+        <p>Open the connection you just made and copy its <b>access token</b>. It starts with
+           <code>ntn_</code>. Paste it below.</p>
         <p class="callout">
-          <b>This is the step people miss.</b> Notion only lets the integration see pages you explicitly share with it.
-          In Notion, open a top-level page, click the <b>•••</b> menu at the top right, choose
-          <b>Connections</b> → <b>Connect to</b>, and pick your integration.
-          Everything nested inside that page is included automatically, so sharing a few top-level
-          pages usually covers the whole workspace.
+          Don't use the <b>Personal access tokens</b> tab. It sits right next to
+          <b>Connections</b> and sounds like the same thing, but it's a different mechanism
+          and won't work here.
+        </p>
+      </li>
+      <li>
+        <h3>Connect your pages to it</h3>
+        <p class="callout">
+          <b>This is the step everyone misses, and nothing works without it.</b>
+          Creating the connection gives it access to <i>nothing</i>. You have to connect
+          pages to it, one time each.
+          <br><br>
+          In Notion, open a page → the <b>•••</b> menu at the top right → <b>Connections</b>
+          (or <b>Add connections</b>) → pick your connection → confirm.
+          <br><br>
+          Everything nested inside that page comes along automatically, so a few top-level
+          pages usually cover everything. <b>Pages under “Private” must each be connected</b> —
+          owning them isn't enough.
         </p>
       </li>
     </ol>
 
     <form id="setup-form">
-      <label for="setup-token">Internal Integration Secret</label>
+      <label for="setup-token">Access token</label>
       <input type="password" id="setup-token" placeholder="ntn_..." autocomplete="off" spellcheck="false" required>
       <div class="error hidden" id="setup-error"></div>
       <button type="submit" class="primary" id="setup-submit">Connect to Notion</button>
