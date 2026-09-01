@@ -100,4 +100,26 @@ jobs:
             -OutFile $notesFile
 
           $assets = @((Get-ChildItem dist\*.exe).FullName) + @("dist\SHA256SUMS.txt")
-          gh release create $tag @assets --title "NotionSearch $tag" --notes-file $notesFile
+
+          # Two ways in, and both have to work:
+          #   git tag v0.1.0 && git push   -> no release exists yet, create it
+          #   "Draft a new release" in the web UI -> the UI already created it,
+          #      and creating it again fails with "release already exists"
+          # Creating a tag in the UI fires this same push event, so the only
+          # difference is whether the release object is already there.
+          gh release view $tag --json tagName *> $null
+          $releaseExists = ($LASTEXITCODE -eq 0)
+          $global:LASTEXITCODE = 0
+
+          if ($releaseExists) {
+            Write-Host "Release $tag already exists - attaching assets to it."
+            # --clobber so re-running the workflow replaces assets rather than
+            # failing. Their release notes are left alone: if someone wrote
+            # them in the UI, overwriting would be rude.
+            gh release upload $tag @assets --clobber
+            if ($LASTEXITCODE -ne 0) { throw "could not upload assets to $tag" }
+          } else {
+            Write-Host "Creating release $tag."
+            gh release create $tag @assets --title "NotionSearch $tag" --notes-file $notesFile
+            if ($LASTEXITCODE -ne 0) { throw "could not create release $tag" }
+          }
