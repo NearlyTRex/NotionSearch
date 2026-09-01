@@ -11,6 +11,7 @@
 
 .EXAMPLE
     .github/scripts/check-version.ps1 -Ref refs/tags/v0.1.0
+    .github/scripts/check-version.ps1 -Ref refs/tags/0.1.0
 
 .EXAMPLE
     # Rehearse a build at any version.
@@ -19,7 +20,7 @@
 
 [CmdletBinding()]
 param(
-    # The git ref, e.g. refs/tags/v0.1.0
+    # The git ref, e.g. refs/tags/v0.1.0 or refs/tags/0.1.0
     [Parameter(Mandatory = $true)]
     [string]$Ref,
 
@@ -47,14 +48,16 @@ if (-not $DeclaredVersion) {
     $DeclaredVersion = $DeclaredVersion.Trim()
 }
 
-if ($Ref -like "refs/tags/v*") {
-    $tag = $Ref -replace "^refs/tags/v", ""
+if ($Ref -like "refs/tags/*") {
+    # The "v" is optional: the GitHub Releases page does not add it, so both
+    # "v0.1.0" and "0.1.0" have to resolve to the same version.
+    $tag = $Ref -replace "^refs/tags/v?", ""
 
     if ($tag -ne $DeclaredVersion) {
         Write-Host "::error::Tag v$tag does not match pyproject.toml version $DeclaredVersion."
         Write-Host "::error::Fix it with one of:"
         Write-Host "::error::  - set version = ""$tag"" in pyproject.toml, commit, then retag; or"
-        Write-Host "::error::  - delete the tag and retag as v$DeclaredVersion"
+        Write-Host "::error::  - delete the tag and retag as $DeclaredVersion (or v$DeclaredVersion)"
         exit 1
     }
 
