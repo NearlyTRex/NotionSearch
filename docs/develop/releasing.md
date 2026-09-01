@@ -1,6 +1,8 @@
 # Releasing
 
-Publishing a Windows installer is one command:
+Two ways to do it. Both run the same workflow and produce the same installer.
+
+## From the command line
 
 ```bash
 git tag v0.1.0
@@ -8,7 +10,25 @@ git push origin v0.1.0
 ```
 
 That triggers `.github/workflows/release.yml`, which compiles the installer,
-smoke-tests it, and attaches it to a GitHub Release with a checksum.
+smoke-tests it, creates the GitHub Release and attaches the installer plus a
+checksum.
+
+## From the GitHub Releases page
+
+**Releases → Draft a new release**, choose or create the tag `v0.1.0`, then
+**Publish release**.
+
+Creating a tag that way fires the same `push` event, so the workflow runs and
+attaches the installer to the release you just made. Anything you wrote in the
+release notes box is left alone — the workflow only uploads assets to an
+existing release, and generates notes only when it creates the release itself.
+
+> **Publish, don't save as draft.** A draft release does not create the tag, so
+> nothing fires and no installer is built. The assets appear a few minutes after
+> publishing, once the Windows build finishes — watch the **Actions** tab.
+
+Re-running the workflow replaces the assets rather than failing, so a failed
+build can simply be re-run once fixed.
 
 To rehearse without publishing, run the workflow by hand from the **Actions** tab
 and give it a version. It builds and tests the installer, uploads it as an
