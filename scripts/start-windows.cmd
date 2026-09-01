@@ -19,11 +19,15 @@ where docker >nul 2>&1
 if errorlevel 1 (
     echo   Docker Desktop does not appear to be installed.
     echo.
-    echo   NotionSearch needs it to run. To install it automatically, run:
+    echo   NotionSearch needs it to run. Easiest fix: re-run the NotionSearch
+    echo   installer and leave "Install Docker Desktop" ticked - it downloads
+    echo   and installs it for you.
     echo.
+    echo   To install it from here instead:
     echo       powershell -ExecutionPolicy Bypass -File "%~dp0install-windows.ps1"
     echo.
-    echo   Or download it from https://www.docker.com/products/docker-desktop/
+    echo   Or download it yourself from
+    echo       https://www.docker.com/products/docker-desktop/
     echo.
     pause
     exit /b 1

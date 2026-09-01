@@ -2,7 +2,26 @@
 
 Two commands, then everything else happens in your browser.
 
-## 1. Start it
+## Windows: one file
+
+Download `NotionSearch-<version>-Setup.exe` from the
+[latest release](https://github.com/NearlyTRex/NotionSearch/releases) and run it.
+
+The installer checks what your PC needs and fills in the gaps:
+
+- If **Docker Desktop** is missing it downloads and installs it for you. Windows
+  will ask your permission part way through, and it may ask you to restart
+  afterwards.
+- If **hardware virtualisation** is switched off in your BIOS/UEFI it says so,
+  because Docker cannot run without it and no installer can turn it on for you.
+
+Then launch **NotionSearch** from the Start Menu and skip to
+[step 2](#2-connect-notion).
+
+> Windows SmartScreen will warn that the publisher is unknown, because the
+> installer is not code-signed. Choose **More info** → **Run anyway**.
+
+## 1. Start it (Linux, macOS, or from source)
 
 ```bash
 git clone https://github.com/NearlyTRex/NotionSearch.git
