@@ -22,18 +22,33 @@ If the port is already taken by something else, change it — see
 
 ## It connected, but finds nothing
 
-Almost always the sharing step. Creating a Notion integration does **not** give it
-access to anything; you have to connect pages to it explicitly.
+Almost always the connection step. Creating a connection in Notion does **not**
+give it access to anything; you have to connect pages to it explicitly.
 
-In Notion: open a top-level page → **•••** → **Connections** → **Connect to** → your
-integration. Then press **Sync**.
+Confirm it in one command:
 
-Check Settings — if "Pages indexed" is 0 after a successful sync, nothing is shared
-yet.
+```bash
+NOTION_TOKEN=ntn_xxx python3 scripts/notion-doctor.py --verbose
+```
+
+That asks Notion directly how many pages it will share. If it reports **0 objects
+with a valid key**, the token is fine and nothing has been connected yet.
+
+To fix: in Notion open a page → **•••** → **Connections** (or **Add connections**)
+→ pick your connection → confirm. Then press **Sync**.
+
+Pages under **Private** must each be connected — owning them is not enough.
+
+The app also says so itself now: a sync that finds nothing reports
+"Notion returned no pages" with the same explanation, rather than a bare success.
 
 ## "Notion rejected that key"
 
-- Make sure you copied the **Internal Integration Secret**, not the integration ID
+Check you copied the token from a **connection** (Developer tools → Connections),
+not from the **Personal access tokens** tab beside it — they are different things.
+
+
+- Make sure you copied the connection's **access token**, not its ID
 - Copy the whole thing — it starts `ntn_` or `secret_`
 - If you regenerated the secret in Notion, the old one stops working. Paste the new
   one in Settings

@@ -482,3 +482,39 @@ def test_request_cancel_only_applies_while_running():
     sync.STATE.running = True
     assert sync.request_cancel() is True
     assert sync.STATE.cancel is True
+
+
+async def test_empty_workspace_explains_the_sharing_step(store, stub_index, monkeypatch):
+    """A sync that finds nothing is the commonest setup problem, and looks
+    exactly like success unless we say otherwise."""
+    monkeypatch.setattr(sync, "NotionClient",
+                        lambda *a, **k: FakeNotion(items=[], blocks={}))
+    await sync.run_sync("ntn_test")
+
+    assert sync.STATE.status == "ok", "an empty workspace is not an error"
+    assert sync.STATE.total == 0
+    assert sync.STATE.hint is not None
+    assert "connected" in sync.STATE.hint.lower()
+    assert sync.STATE.snapshot()["hint"] == sync.STATE.hint
+
+
+async def test_no_hint_when_pages_are_found(store, stub_index, monkeypatch):
+    monkeypatch.setattr(sync, "NotionClient", lambda *a, **k: FakeNotion(
+        items=[page("p1", "Lisbon")], blocks={"p1": [para("body")]}))
+    await sync.run_sync("ntn_test")
+
+    assert sync.STATE.status == "ok"
+    assert sync.STATE.hint is None
+
+
+async def test_hint_is_cleared_on_the_next_run(store, stub_index, monkeypatch):
+    """A stale explanation must not linger once pages appear."""
+    monkeypatch.setattr(sync, "NotionClient",
+                        lambda *a, **k: FakeNotion(items=[], blocks={}))
+    await sync.run_sync("ntn_test")
+    assert sync.STATE.hint is not None
+
+    monkeypatch.setattr(sync, "NotionClient", lambda *a, **k: FakeNotion(
+        items=[page("p1", "Lisbon")], blocks={"p1": [para("body")]}))
+    await sync.run_sync("ntn_test")
+    assert sync.STATE.hint is None

@@ -35,6 +35,9 @@ class SyncState:
         self.running = False
         self.run_id: int | None = None
         self.phase = "idle"
+        # Objects Notion returned. Distinct from `total`, which is the
+        # denominator of whatever phase is currently running.
+        self.discovered = 0
         self.total = 0
         self.processed = 0
         self.updated = 0
@@ -43,6 +46,8 @@ class SyncState:
         self.finished_at: str | None = None
         self.status = "idle"
         self.error: str | None = None
+        # Set when a sync succeeds but the result needs explaining.
+        self.hint: str | None = None
         self.cancel = False
 
     def snapshot(self) -> dict:
@@ -53,6 +58,7 @@ class SyncState:
             "running": self.running,
             "status": self.status,
             "phase": self.phase,
+            "discovered": self.discovered,
             "total": self.total,
             "processed": self.processed,
             "updated": self.updated,
@@ -61,6 +67,7 @@ class SyncState:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "error": self.error,
+            "hint": self.hint,
         }
 
 
@@ -256,8 +263,10 @@ async def run_sync(token: str, mode: str = "incremental") -> None:
     STATE.status = "running"
     STATE.cancel = False
     STATE.error = None
+    STATE.hint = None  # don't carry a previous run's explanation forward
     STATE.started_at = seen_at
     STATE.finished_at = None
+    STATE.discovered = 0
     STATE.total = STATE.processed = STATE.updated = STATE.removed = 0
 
     with db.tx() as conn:
@@ -282,18 +291,34 @@ async def run_sync(token: str, mode: str = "incremental") -> None:
             if STATE.cancel:
                 raise asyncio.CancelledError()
             page_id, changed = _upsert_meta(item, seen_at)
-            STATE.total += 1
+            STATE.discovered += 1
+            STATE.total = STATE.discovered
             if changed:
                 needs_content.append(page_id)
-            if STATE.total % 25 == 0:
-                _persist(total=STATE.total, phase=f"discovering pages ({STATE.total} found)")
+            if STATE.discovered % 25 == 0:
+                _persist(total=STATE.discovered,
+                         phase=f"discovering pages ({STATE.discovered} found)")
 
-        _persist(total=STATE.total)
-        log.info("discovered %d objects, %d need content", STATE.total, len(needs_content))
+        _persist(total=STATE.discovered)
+        log.info("discovered %d objects, %d need content", STATE.discovered, len(needs_content))
+
+        # Notion returning nothing is the single most common setup problem, and
+        # it is indistinguishable from success unless we say so: the key is
+        # valid, the workspace is right, but no pages have been connected to
+        # the integration. Reporting a bare "sync complete" here sends people
+        # hunting for a bug that isn't there.
+        if STATE.discovered == 0:
+            STATE.hint = (
+                "Notion returned no pages. Creating an integration does not give it "
+                "access to anything — each top-level page has to be connected to it "
+                "once, in Notion: ••• menu -> Connections -> your integration. "
+                "Nested pages are then included automatically."
+            )
+            log.warning("sync found nothing: no pages are shared with the integration")
 
         # Phase 2 — pull block content for new/changed pages only.
         _set_phase(f"reading {len(needs_content)} new or changed pages")
-        STATE.total = max(len(needs_content), 1)
+        STATE.total = len(needs_content)
         semaphore = asyncio.Semaphore(CONCURRENCY)
 
         async def fetch_one(pid: str):

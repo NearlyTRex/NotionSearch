@@ -33,9 +33,10 @@ Open **<http://localhost:8080>** and follow the three steps it shows you.
 That's the whole install. The first sync starts on its own once you paste your
 Notion key.
 
-> **The step everyone misses:** creating a Notion integration isn't enough — you
-> have to share pages with it. In Notion: **•••** → **Connections** → **Connect to**
-> → your integration. Nested pages come along automatically.
+> **The step everyone misses:** creating a Notion connection isn't enough — you
+> have to connect your pages to it. In Notion: **•••** → **Connections** → pick your
+> connection. Nested pages come along automatically, but pages under **Private**
+> must each be connected.
 > Full walkthrough: [Getting started](docs/usage/getting-started.md).
 
 ## What it does
