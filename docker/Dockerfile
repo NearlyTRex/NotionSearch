@@ -14,7 +14,16 @@ RUN apt-get update \
 
 # Dependencies first so code edits don't invalidate the layer.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# pip is a build-time tool: nothing at runtime uses it. Leaving it behind ships
+# its vendored dependency tree (msgpack, setuptools and friends, listed in
+# pip/_vendor/vendor.txt), which vulnerability scanners correctly report against
+# the image even though that code never executes here. Removing it deletes the
+# vulnerable files rather than suppressing the finding.
+RUN pip install --no-cache-dir -r requirements.txt \
+    && rm -rf /usr/local/lib/python3.*/site-packages/pip \
+              /usr/local/lib/python3.*/site-packages/pip-*.dist-info \
+              /usr/local/lib/python3.*/ensurepip \
+              /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.*
 
 COPY app/ ./app/
 COPY web/ ./web/
