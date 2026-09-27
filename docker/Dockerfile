@@ -35,6 +35,8 @@ RUN pip install --no-cache-dir --require-hashes --no-deps -r requirements.txt \
               /usr/local/lib/python3.*/ensurepip \
               /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.*
 
+# pyproject.toml is where the app reads its version from.
+COPY pyproject.toml ./
 COPY app/ ./app/
 COPY web/ ./web/
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh

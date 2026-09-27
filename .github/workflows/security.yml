@@ -27,15 +27,20 @@ jobs:
   # runtime dependencies.
   security:
     name: Security
-    uses: NearlyTRex/Workflows/.github/workflows/security.yml@0dd8e56278d822277ecd6fd06f12b24c3814d84f # v0.2.6
+    uses: NearlyTRex/Workflows/.github/workflows/security.yml@189a9c599b51396d09f95469f00b561da645ded1 # v0.2.7
     permissions:
       contents: read
     with:
       pip-audit-files: requirements.txt
+      # On top of the library's defaults (.env files, private keys): the app
+      # keeps the Notion token in data/notionsearch.db, and a binary SQLite
+      # file is not something a content scanner reliably flags. data/ itself
+      # should only ever hold .gitkeep.
+      tracked-files-patterns: "*.db *.db-shm *.db-wal *.sqlite *.sqlite3 data/* !data/.gitkeep"
 
   codeql:
     name: CodeQL
-    uses: NearlyTRex/Workflows/.github/workflows/codeql.yml@0dd8e56278d822277ecd6fd06f12b24c3814d84f # v0.2.6
+    uses: NearlyTRex/Workflows/.github/workflows/codeql.yml@189a9c599b51396d09f95469f00b561da645ded1 # v0.2.7
     permissions:
       actions: read
       contents: read
@@ -47,7 +52,7 @@ jobs:
   dependency-review:
     name: Dependency Review
     if: github.event_name == 'pull_request'
-    uses: NearlyTRex/Workflows/.github/workflows/dependency-review.yml@0dd8e56278d822277ecd6fd06f12b24c3814d84f # v0.2.6
+    uses: NearlyTRex/Workflows/.github/workflows/dependency-review.yml@189a9c599b51396d09f95469f00b561da645ded1 # v0.2.7
     permissions:
       contents: read
 
@@ -56,27 +61,10 @@ jobs:
   # .trivyignore.
   container-scan:
     name: Container Scan
-    uses: NearlyTRex/Workflows/.github/workflows/container-scan.yml@0dd8e56278d822277ecd6fd06f12b24c3814d84f # v0.2.6
+    uses: NearlyTRex/Workflows/.github/workflows/container-scan.yml@189a9c599b51396d09f95469f00b561da645ded1 # v0.2.7
     permissions:
       contents: read
     with:
       dockerfile: docker/Dockerfile
       context: .
       config-scan: true
-
-  # Complements gitleaks: it scans contents, this checks that whole categories
-  # of file (.env, *.db, keys) are never committed at all. The app keeps the
-  # Notion token in data/notionsearch.db, and a binary SQLite file is not
-  # something a content scanner reliably flags.
-  tracked-files:
-    name: No credential-bearing files
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - run: .github/scripts/check-no-secrets.sh

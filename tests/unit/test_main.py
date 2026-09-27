@@ -385,3 +385,25 @@ def test_non_401_notion_errors_keep_their_own_message(client, store, monkeypatch
     assert res.status_code == 400
     # The generic 401 wording must not overwrite a more specific message.
     assert res.json()["error"] == "Rate limited, slow down."
+
+
+# --- version --------------------------------------------------------------
+
+def test_version_comes_from_pyproject():
+    import tomllib
+    declared = tomllib.loads((main.ROOT_DIR / "pyproject.toml").read_text())["project"]["version"]
+    assert main.read_version() == declared
+    assert main.app.version == declared
+
+
+@pytest.mark.parametrize("content", [
+    None,                                  # missing file
+    "not [valid toml",                     # unparseable
+    '[project]\nname = "notionsearch"\n',  # no version
+    '[tool.x]\nversion = "9.9.9"\n',       # no [project] table
+])
+def test_unreadable_version_falls_back(tmp_path, content):
+    path = tmp_path / "pyproject.toml"
+    if content is not None:
+        path.write_text(content)
+    assert main.read_version(path) == "0.0.0"

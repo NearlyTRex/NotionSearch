@@ -143,16 +143,17 @@ the suggestion would silently blank the location facet.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request. The Python and
-Lint jobs are reusable workflows from the shared
+`.github/workflows/ci.yml` runs on every push and pull request. Every job is a
+reusable workflow from the shared
 [NearlyTRex/Workflows](https://github.com/NearlyTRex/Workflows) library, pinned
-to a commit; improvements to them belong there, so every repo gets them.
+to a commit; improvements to them belong there, so every repo gets them. What is
+specific to this project is passed in as scripts from `.github/scripts/`.
 
 | Job | What it does |
 |---|---|
 | Python 3.12, Python 3.14 | ruff, the integration tier against the Meilisearch that ships, then the unit and tooling tiers under the 100% coverage gate. 3.12 is the oldest version supported; 3.14 is what the container runs |
 | Lint | shellcheck, Markdown (rules in `.markdownlint.yaml`) and JSON |
-| Docker image | Builds the image, starts the stack, checks health, the UI, and that the app is not running as root |
+| Docker stack | Builds the image and starts the stack until both services report healthy, then checks the UI is served and the app is not running as root |
 | Windows installer | Compiles the Inno Setup script and silently installs it, so a broken installer is caught here rather than at release |
 
 ### Steps live in scripts, not in YAML
@@ -166,13 +167,11 @@ runs**, locally:
 ```bash
 .github/scripts/with-meilisearch.sh CMD     # run CMD against a test Meilisearch
 .github/scripts/shellcheck-all.sh          # every shell script in the repo
-.github/scripts/wait-for-health.sh          # wait for the stack, dump logs if not
-.github/scripts/check-endpoints.sh          # UI and static assets
+.github/scripts/check-endpoints.sh          # UI and static assets, against a running stack
+.github/scripts/check-not-root.sh           # the app dropped root, against a running stack
 ```
 
 ```powershell
-.github\scripts\check-version.ps1 -Ref refs/tags/v0.1.0
-.github\scripts\release-notes.ps1 -Version 0.1.0 -Repo NearlyTRex/NotionSearch
 .github\scripts\smoke-test-installer.ps1
 ```
 

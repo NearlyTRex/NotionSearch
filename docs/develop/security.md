@@ -5,18 +5,17 @@ weekly on a schedule — because a vulnerability disclosed after your last commi
 still affects you.
 
 It is deliberately separate from `ci.yml`, so a scanner going red on something
-outside your control never blocks a code review. Every job except the last is a
-reusable workflow from the shared
-[NearlyTRex/Workflows](https://github.com/NearlyTRex/Workflows) library, which
-pins each scanner by hash or digest and keeps them current with Dependabot.
+outside your control never blocks a code review. Every job is a reusable
+workflow from the shared [NearlyTRex/Workflows](https://github.com/NearlyTRex/Workflows)
+library, which pins each scanner by hash or digest and keeps them current with
+Dependabot.
 
 | Job | What it checks |
 |---|---|
-| Security | `zizmor` over the workflows, `gitleaks` over full git history, and `pip-audit` against the hash-locked `requirements.txt` |
+| Security | `zizmor` over the workflows, `gitleaks` over full git history, `pip-audit` against the hash-locked `requirements.txt`, and a check that no credential-bearing file is tracked |
 | CodeQL | Static analysis of the Python, `web/app.js` and the workflows. Results are under Security → Code scanning |
 | Dependency Review | Pull requests only: fails one that adds a dependency with a known vulnerability |
 | Container Scan | `trivy` against the image the Dockerfile produces, and against the Dockerfile itself for misconfigurations |
-| No credential-bearing files | That no `.env`, `*.db`, key or certificate file is tracked |
 
 ## Running them locally
 
@@ -25,8 +24,9 @@ pins each scanner by hash or digest and keeps them current with Dependabot.
 docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
     git --redact /repo
 
-# no credential-bearing file is tracked
-.github/scripts/check-no-secrets.sh
+# no credential-bearing file is tracked (from a checkout of NearlyTRex/Workflows)
+python3 ../Workflows/actions/check-tracked-files/check_tracked_files.py \
+    '*.db' '*.db-shm' '*.db-wal' '*.sqlite' '*.sqlite3' 'data/*' '!data/.gitkeep'
 
 # python dependency CVEs
 pip-audit --requirement requirements.txt --require-hashes --disable-pip --strict
@@ -70,10 +70,12 @@ wholesale. A real secret pasted into a test is exactly what this should catch.
 Removing the file is not enough — anything pushed must be treated as leaked.
 **Rotate the credential first**, then clean the history.
 
-## Why `check-no-secrets.sh` exists alongside gitleaks
+## Why the tracked-files check exists alongside gitleaks
 
-gitleaks scans file *contents*. That script checks that whole categories of file
-are never committed at all: `.env`, `*.db`, `*.pem`, keys.
+gitleaks scans file *contents*. The tracked-files check makes sure whole
+categories of file are never committed at all. The library covers `.env` files
+and private keys; `security.yml` adds SQLite databases and anything under
+`data/` except `.gitkeep`, through `tracked-files-patterns`.
 
 It matters here specifically because the app stores the Notion token inside
 `data/notionsearch.db`. A single `git add -f data/` would put a live credential

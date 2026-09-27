@@ -1,137 +1,63 @@
 name: Release
 
-# Publishing is two commands:
-#   git tag v0.1.0 && git push origin v0.1.0
-# That builds the Windows installer, smoke-tests it, and attaches it to a
-# GitHub Release. Run it by hand from the Actions tab to rehearse without
-# tagging.
+# Stage two of a release. When the version in pyproject.toml has no tag yet, it
+# builds the Windows installer at that version, smoke-tests it, then tags this
+# commit and publishes a GitHub Release with the installer and its checksum
+# attached. Pushes that don't change the version find the tag already there, and
+# build nothing.
 #
-# Steps with real logic live in .github/scripts/ so they can be run locally.
-
+# To release: Actions -> Prepare Release -> Run workflow, then merge its PR.
 on:
   push:
-    tags:
-      # Both forms, because the GitHub Releases page does not add the "v" for
-      # you and a tag that silently matches nothing looks exactly like a broken
-      # workflow. "v0.1.0" and "0.1.0" both build.
-      - "v[0-9]*"
-      - "[0-9]*"
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to build (e.g. 0.1.0). No release is published."
-        required: true
-        default: "0.0.0-test"
+    branches: [main]
 
-# Only the publish job needs to write; scope it there rather than globally.
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
+  # The same tests as CI. Release PRs are opened with the workflow token, which
+  # doesn't trigger CI, so this is where a release commit gets tested.
+  check:
+    name: Check
+    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@189a9c599b51396d09f95469f00b561da645ded1 # v0.2.7
+    permissions:
+      contents: read
+    with:
+      python-version: "3.14"
+      commands: .github/scripts/with-meilisearch.sh python -m pytest tests/integration -q
+      test-command: pytest -q tests/unit tests/tools
+
+  pending:
+    name: Pending
+    uses: NearlyTRex/Workflows/.github/workflows/release-check.yml@189a9c599b51396d09f95469f00b561da645ded1 # v0.2.7
+    permissions:
+      contents: read
+    with:
+      version-file: pyproject.toml
+
   installer:
-    name: Windows installer
-    runs-on: windows-latest
-    timeout-minutes: 30
-    # Creating the GitHub Release needs write; nothing else in the job does.
+    name: Installer
+    needs: pending
+    if: needs.pending.outputs.pending == 'true'
+    uses: NearlyTRex/Workflows/.github/workflows/inno-setup.yml@189a9c599b51396d09f95469f00b561da645ded1 # v0.2.7
+    permissions:
+      contents: read
+    with:
+      script: packaging/windows/notionsearch.iss
+      version: ${{ needs.pending.outputs.version }}
+      # Installs it silently and checks the result actually works, not just
+      # that it compiled: the installer is the first thing a user runs.
+      smoke-test: .github\scripts\smoke-test-installer.ps1
+      artifact: installer
+
+  release:
+    name: Release
+    needs: [check, installer]
+    uses: NearlyTRex/Workflows/.github/workflows/release.yml@189a9c599b51396d09f95469f00b561da645ded1 # v0.2.7
     permissions:
       contents: write
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # tomllib, used to read the version, needs Python 3.11+.
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-
-      # Refuses to build when the tag and pyproject.toml disagree, so an
-      # installer can never ship with a version it does not actually declare.
-      - name: Work out the version
-        id: version
-        shell: pwsh
-        # Inputs go through env, never straight into the script: a version typed
-        # into the Run workflow form would otherwise be executed as PowerShell.
-        env:
-          FALLBACK_VERSION: ${{ github.event.inputs.version }}
-        run: |
-          .github\scripts\check-version.ps1 `
-            -Ref "$env:GITHUB_REF" `
-            -FallbackVersion "$env:FALLBACK_VERSION"
-
-      - name: Install Inno Setup
-        run: choco install innosetup --no-progress -y
-
-      - name: Compile the installer
-        shell: pwsh
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
-            "/DAppVersion=$env:VERSION" `
-            packaging\windows\notionsearch.iss
-          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
-
-      # Proves the installer works rather than merely compiling — this is the
-      # first thing a user would hit.
-      - name: Smoke-test the installer
-        shell: pwsh
-        run: .github\scripts\smoke-test-installer.ps1
-
-      - name: Checksum
-        shell: pwsh
-        run: |
-          $exe = Get-ChildItem dist\*.exe | Select-Object -First 1
-          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
-          "$hash  $($exe.Name)" | Out-File -FilePath "dist\SHA256SUMS.txt" -Encoding ascii
-          Write-Host "$hash  $($exe.Name)"
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: windows-installer
-          path: |
-            dist/*.exe
-            dist/SHA256SUMS.txt
-          retention-days: 14
-
-      - name: Publish to the GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-          REPO: ${{ github.repository }}
-        run: |
-          $tag = $env:GITHUB_REF -replace "^refs/tags/", ""
-          $notesFile = Join-Path $env:RUNNER_TEMP "notes.md"
-
-          .github\scripts\release-notes.ps1 `
-            -Version "$env:VERSION" `
-            -Repo "$env:REPO" `
-            -OutFile $notesFile
-
-          $assets = @((Get-ChildItem dist\*.exe).FullName) + @("dist\SHA256SUMS.txt")
-
-          # Two ways in, and both have to work:
-          #   git tag v0.1.0 && git push   -> no release exists yet, create it
-          #   "Draft a new release" in the web UI -> the UI already created it,
-          #      and creating it again fails with "release already exists"
-          # Creating a tag in the UI fires this same push event, so the only
-          # difference is whether the release object is already there.
-          gh release view $tag --json tagName *> $null
-          $releaseExists = ($LASTEXITCODE -eq 0)
-          $global:LASTEXITCODE = 0
-
-          if ($releaseExists) {
-            Write-Host "Release $tag already exists - attaching assets to it."
-            # --clobber so re-running the workflow replaces assets rather than
-            # failing. Their release notes are left alone: if someone wrote
-            # them in the UI, overwriting would be rude.
-            gh release upload $tag @assets --clobber
-            if ($LASTEXITCODE -ne 0) { throw "could not upload assets to $tag" }
-          } else {
-            Write-Host "Creating release $tag."
-            gh release create $tag @assets --title "NotionSearch $tag" --notes-file $notesFile
-            if ($LASTEXITCODE -ne 0) { throw "could not create release $tag" }
-          }
+    with:
+      version-file: pyproject.toml
+      assets: installer
+      checksums: true
+      # Install steps for Windows and Linux/macOS, above the generated notes.
+      notes-file: .github/release-notes.md
