@@ -41,7 +41,7 @@ export GITHUB_TOKEN=$(gh auth token)
 
 The tool warns when an upgrade crosses a major version:
 
-```
+```text
 WARNING: major version bumps, which can change inputs or behaviour:
   actions/checkout: v4 -> v7.0.1
 ```
@@ -51,13 +51,13 @@ it breaks, `--keep-version` pins the older version instead.
 
 ## Enforcement
 
-CI runs:
+CI enforces it with zizmor, in the Security workflow, which fails if any
+third-party action or reusable workflow is not pinned to a commit hash. The same
+check runs locally, offline:
 
 ```bash
 .github/scripts/pin-actions.py --check
 ```
-
-which fails if any action is not pinned to a SHA.
 
 `--check` deliberately makes **no network calls**. It answers only the security
 question — is everything pinned? — so it cannot be rate limited, needs no token,
@@ -74,4 +74,4 @@ python -m pytest tests/tools -q
 The tool rewrites workflow files in place, so its parsing and rewriting are
 covered by tests — including that it leaves everything except the `uses:` line
 untouched. They live in `tests/tools/` rather than `tests/unit/`, which mirrors
-`app/`, and sit outside the 100% coverage gate.
+`app/`, and are held to the same 100% coverage gate.

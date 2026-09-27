@@ -69,7 +69,7 @@ Everything is indexed in [docs/README.md](docs/README.md).
 
 ## How it works
 
-```
+```text
 Notion API  ──sync──>  SQLite (source of truth)  ──index──>  Meilisearch
                             │                                     │
                             └──────────>  FastAPI  <──────────────┘

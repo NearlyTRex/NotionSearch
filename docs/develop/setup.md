@@ -12,12 +12,22 @@ python3 -m venv .venv
 That installs the runtime dependencies plus the test and lint tools in one go.
 Python 3.12 or newer.
 
-Runtime dependencies are pinned in `requirements.txt`, which `pyproject.toml` reads
+Runtime dependencies are pinned in `requirements.in`, which `pyproject.toml` reads
 as its single source of truth — so there is only ever one list to edit. The `[dev]`
 extra (pytest, pytest-asyncio, pytest-cov, ruff) lives in `pyproject.toml`.
 
-For a runtime-only install, `pip install -r requirements.txt` still works and is
-what the container does.
+`requirements.txt` is compiled from it with a hash for every package, including
+the transitive ones, and is what the container installs with `--require-hashes`.
+After editing `requirements.in`, regenerate it for the container's Python:
+
+```bash
+docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/w" -w /w python:3.14-alpine \
+  sh -c 'pip install -q --user pip-tools && ~/.local/bin/pip-compile --generate-hashes \
+         --allow-unsafe --strip-extras -o requirements.txt requirements.in'
+```
+
+Dependabot keeps `requirements.txt` current on its own; it only touches the lock,
+so moving a pin in `requirements.in` stays a deliberate edit.
 
 ## Meilisearch
 

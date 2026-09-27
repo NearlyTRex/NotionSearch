@@ -39,7 +39,7 @@ artifact, and skips creating a release.
 The release job reads `version` from `pyproject.toml` and refuses to build if the
 tag disagrees:
 
-```
+```text
 Tag v0.2.0 does not match pyproject.toml version 0.1.0.
 ```
 

@@ -18,9 +18,10 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "Programming Language :: Python :: 3.12",
 ]
-# Runtime dependencies live in requirements.txt, which stays the single source of
-# truth: the container installs from it directly, which keeps them in their own
-# cached Docker layer.
+# Runtime dependencies are pinned in requirements.in, the single source of truth.
+# requirements.txt is compiled from it with hashes, and is what the container
+# installs, so every package it ships is verified against a known digest:
+#   pip-compile --generate-hashes --allow-unsafe --strip-extras -o requirements.txt requirements.in
 dynamic = ["dependencies"]
 
 [project.optional-dependencies]
@@ -40,7 +41,7 @@ Source = "https://github.com/NearlyTRex/NotionSearch"
 packages = ["app"]
 
 [tool.setuptools.dynamic]
-dependencies = { file = ["requirements.txt"] }
+dependencies = { file = ["requirements.in"] }
 
 [tool.pytest.ini_options]
 # This file sits at the project root, so pytest finds it from the root *and* from
@@ -52,7 +53,8 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["app"]
+# Everything that runs: the app, the scripts users run, and the tooling CI runs.
+source = ["app", "scripts", ".github/scripts"]
 branch = true
 
 [tool.coverage.report]
