@@ -24,7 +24,7 @@ concurrency:
 jobs:
   python:
     name: Python ${{ matrix.python }}
-    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@53a4d8dcd0b519a0fa7cd9c0b92b87057a740e0e # dev/container-config-scan (repin to v0.2.4 once released)
+    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@e0a2ed91cf41a643805d39281bc7bcc180d54072 # v0.2.4
     permissions:
       contents: read
     strategy:
@@ -48,7 +48,7 @@ jobs:
 
   lint:
     name: Lint
-    uses: NearlyTRex/Workflows/.github/workflows/lint.yml@53a4d8dcd0b519a0fa7cd9c0b92b87057a740e0e # dev/container-config-scan (repin to v0.2.4 once released)
+    uses: NearlyTRex/Workflows/.github/workflows/lint.yml@e0a2ed91cf41a643805d39281bc7bcc180d54072 # v0.2.4
     permissions:
       contents: read
 
