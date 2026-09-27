@@ -70,7 +70,7 @@ last sync won't be there yet.
 
 **It might not be shared with the integration.** This is the most common cause.
 Notion only exposes pages you've explicitly connected. See
-[Getting started](getting-started.md#share-your-pages-with-it).
+[Getting started](getting-started.md#connect-your-pages-to-it).
 
 **Results look stale or wrong.** Settings → **Full rebuild** re-reads everything
 from scratch.

@@ -51,19 +51,25 @@ jobs:
       - name: Work out the version
         id: version
         shell: pwsh
+        # Inputs go through env, never straight into the script: a version typed
+        # into the Run workflow form would otherwise be executed as PowerShell.
+        env:
+          FALLBACK_VERSION: ${{ github.event.inputs.version }}
         run: |
           .github\scripts\check-version.ps1 `
             -Ref "$env:GITHUB_REF" `
-            -FallbackVersion "${{ github.event.inputs.version }}"
+            -FallbackVersion "$env:FALLBACK_VERSION"
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
 
       - name: Compile the installer
         shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
-            /DAppVersion=${{ steps.version.outputs.version }} `
+            "/DAppVersion=$env:VERSION" `
             packaging\windows\notionsearch.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
 
@@ -94,13 +100,15 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          REPO: ${{ github.repository }}
         run: |
           $tag = $env:GITHUB_REF -replace "^refs/tags/", ""
           $notesFile = Join-Path $env:RUNNER_TEMP "notes.md"
 
           .github\scripts\release-notes.ps1 `
-            -Version "${{ steps.version.outputs.version }}" `
-            -Repo "${{ github.repository }}" `
+            -Version "$env:VERSION" `
+            -Repo "$env:REPO" `
             -OutFile $notesFile
 
           $assets = @((Get-ChildItem dist\*.exe).FullName) + @("dist\SHA256SUMS.txt")

@@ -1,7 +1,10 @@
 name: CI
 
-# Steps with real logic live in .github/scripts/ so they can be run locally,
-# exactly as CI runs them, and linted. Only one-liners stay inline.
+# Tests and lint come from the shared NearlyTRex/Workflows library, so a fix or
+# tool update there reaches this repo through one Dependabot bump. Only the jobs
+# specific to this project (the Docker stack and the Windows installer) live
+# here, and their logic is in .github/scripts/ so it runs locally exactly as
+# CI runs it.
 
 on:
   push:
@@ -19,73 +22,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  python:
+    name: Python ${{ matrix.python }}
+    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@0dd8e56278d822277ecd6fd06f12b24c3814d84f # v0.2.6
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest version pyproject.toml allows, and the one the container
+        # ships. Testing only the floor would leave the code that actually runs
+        # untested.
+        python: ["3.12", "3.14"]
+    with:
+      python-version: ${{ matrix.python }}
+      # Starts Meilisearch at the version docker-compose.yml ships, exports its
+      # settings to the coverage run below, and runs the integration tier. That
+      # tier drives the app in a separate process, so it cannot contribute
+      # in-process coverage; it proves behaviour end to end instead.
+      commands: .github/scripts/with-meilisearch.sh python -m pytest tests/integration -q
+      # Every line and branch of the app, the scripts and the repo tooling, as
+      # listed under [tool.coverage] in pyproject.toml. The library's default
+      # gate is 100%.
+      test-command: pytest -q tests/unit tests/tools
 
-    services:
-      meilisearch:
-        image: getmeili/meilisearch:v1.11
-        ports:
-          - 7700:7700
-        env:
-          MEILI_MASTER_KEY: testkey1234567890
-          MEILI_NO_ANALYTICS: "true"
-          MEILI_ENV: development
-        options: >-
-          --health-cmd "curl -f http://localhost:7700/health"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 20
-
-    env:
-      MEILI_URL: http://127.0.0.1:7700
-      MEILI_MASTER_KEY: testkey1234567890
-      # Turn a missing search engine into a failure instead of a silent skip:
-      # a green run that skipped the search tests is not a passing build.
-      REQUIRE_MEILI: "1"
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install
-        run: pip install -e ".[dev]"
-
-      - name: Lint Python
-        run: python -m ruff check app/ tests/ .github/scripts/
-
-      # Actions must be pinned to immutable commit SHAs: a tag can be moved to
-      # point at different code. Offline, so it never fails on a rate limit and
-      # never goes red merely because upstream published a release.
-      - name: Actions are pinned to commit SHAs
-        run: python .github/scripts/pin-actions.py --check
-
-      # Shell scripts are on the critical path: the container entrypoint decides
-      # whether the app can start at all.
-      - name: Lint shell scripts
-        run: .github/scripts/shellcheck-all.sh
-
-      # Coverage is enforced against the unit tier only. The integration tier
-      # runs the app in a separate process, so it cannot contribute in-process
-      # coverage — it proves behaviour end to end instead.
-      # fail_under = 100 lives in pyproject.toml, so this fails the build if a
-      # single statement or branch goes untested.
-      - name: Unit tests and 100% coverage gate
-        run: python -m pytest tests/unit -q --cov
-
-      - name: Integration tests
-        run: python -m pytest tests/integration -q
-
-      - name: Repository tooling tests
-        run: python -m pytest tests/tools -q
+  lint:
+    name: Lint
+    uses: NearlyTRex/Workflows/.github/workflows/lint.yml@0dd8e56278d822277ecd6fd06f12b24c3814d84f # v0.2.6
+    permissions:
+      contents: read
 
   docker:
     name: Docker image

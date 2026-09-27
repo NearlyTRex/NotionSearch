@@ -1,36 +1,17 @@
 version: 2
 
-# Keeps dependencies current so the security workflow has less to find.
-# Grouped so routine bumps arrive as one pull request rather than a dozen.
-
+# Weekly, grouped, and 7 days behind upstream releases so a compromised release
+# has time to be caught before it is proposed here.
 updates:
-  # Python runtime dependencies. requirements.txt is fully pinned, which is
-  # what makes container builds reproducible — and what makes this necessary,
-  # since nothing moves on its own.
-  - package-ecosystem: pip
-    directory: "/"
-    schedule:
-      interval: weekly
-      day: monday
-      time: "07:00"
-    open-pull-requests-limit: 5
-    groups:
-      python-minor-and-patch:
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-    labels: ["dependencies"]
-    commit-message:
-      prefix: "deps"
-
-  # Workflow actions. These are pinned to commit SHAs; Dependabot reads the
-  # trailing "# v7.0.1" comment to know the version and updates both together,
-  # so pinning does not leave us stranded on stale actions.
+  # Workflow actions, including the NearlyTRex/Workflows library pin. Both are
+  # pinned to commit SHAs; Dependabot reads the trailing "# v0.2.4" comment to
+  # know the version and updates both together.
   - package-ecosystem: github-actions
-    directory: "/"
+    directories: ["/"]
     schedule:
       interval: weekly
-      day: monday
-      time: "07:00"
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
@@ -38,14 +19,49 @@ updates:
     commit-message:
       prefix: "ci"
 
-  # The container base image (python:3.12-slim). Base-layer CVEs are the ones
-  # the image scan flags, and a rebuild is the only thing that clears them.
-  - package-ecosystem: docker
-    directory: "/docker"
+  # Python runtime dependencies. Only the hash-locked requirements.txt moves;
+  # the pins in requirements.in stay as written, so bumping one past its pin is
+  # a deliberate edit.
+  - package-ecosystem: pip
+    directories: ["/"]
+    versioning-strategy: lockfile-only
     schedule:
       interval: weekly
-      day: monday
-      time: "07:00"
+    cooldown:
+      default-days: 7
+    groups:
+      python:
+        patterns: ["*"]
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "deps"
+
+  # The container base image (python:3.14-alpine). Base-layer CVEs are the ones
+  # the image scan flags, and a rebuild is the only thing that clears them.
+  - package-ecosystem: docker
+    directories: ["/docker"]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      docker:
+        patterns: ["*"]
+    labels: ["dependencies", "docker"]
+    commit-message:
+      prefix: "docker"
+
+  # Meilisearch, which is named in docker-compose.yml rather than a Dockerfile.
+  # CI reads the version from there, so a bump here is tested before it lands.
+  - package-ecosystem: docker-compose
+    directories: ["/docker"]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      docker-compose:
+        patterns: ["*"]
     labels: ["dependencies", "docker"]
     commit-message:
       prefix: "docker"

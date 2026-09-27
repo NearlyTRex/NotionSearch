@@ -32,4 +32,4 @@ fi
 # Best effort: on Docker Desktop mounts chown is a no-op, which is fine.
 chown "$TARGET_UID:$TARGET_GID" "$DATA_DIR" 2>/dev/null || true
 
-exec gosu "$TARGET_UID:$TARGET_GID" "$@"
+exec su-exec "$TARGET_UID:$TARGET_GID" "$@"

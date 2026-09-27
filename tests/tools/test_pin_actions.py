@@ -1,14 +1,17 @@
 """Tests for .github/scripts/pin-actions.py.
 
 Repository tooling rather than application code, so it lives outside
-tests/unit/ (which mirrors app/) and outside the coverage gate. It still gets
-tested, because this tool rewrites workflow files in place.
+tests/unit/ (which mirrors app/). It is inside the 100% coverage gate all the
+same, because this tool rewrites workflow files in place.
 
-Everything here is offline: no GitHub API calls.
+Everything here is offline: the GitHub API is replaced with canned responses.
 """
 
 import importlib.util
+import io
+import json
 import sys
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -278,3 +281,139 @@ def test_api_failure_is_reported_not_crashed(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(pin.Resolver, "latest_tag", fail)
     assert pin.main(["--root", str(tmp_path)]) == 1
     assert "rate limit" in capsys.readouterr().err
+
+
+def test_check_latest_fails_when_a_pin_is_behind(tmp_path, monkeypatch, capsys):
+    write_workflow(tmp_path, f"steps:\n  - uses: actions/checkout@{SHA} # v4.0.0\n")
+    monkeypatch.setattr(pin.Resolver, "latest_tag", lambda self, repo: "v7.0.1")
+    monkeypatch.setattr(pin.Resolver, "sha_for", lambda self, repo, ref: SHA2)
+
+    assert pin.main(["--check-latest", "--root", str(tmp_path)]) == 1
+    assert "unpinned or out of date" in capsys.readouterr().out
+
+
+def test_workflows_with_no_external_actions(tmp_path, capsys):
+    write_workflow(tmp_path, "steps:\n  - run: echo hi\n")
+    assert pin.main(["--check", "--root", str(tmp_path)]) == 0
+    assert "No external actions" in capsys.readouterr().out
+
+
+# --- the GitHub API -------------------------------------------------------
+
+class FakeResponse(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def http_error(code, body=b""):
+    return urllib.error.HTTPError("https://api.github.com/x", code, "err", {}, io.BytesIO(body))
+
+
+def test_request_sends_a_token_when_one_is_set(monkeypatch):
+    seen = {}
+
+    def urlopen(req, timeout):
+        seen.update(req.headers)
+        return FakeResponse(json.dumps({"ok": True}).encode())
+
+    monkeypatch.setattr(pin.urllib.request, "urlopen", urlopen)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setenv("GH_TOKEN", "abc")
+    assert pin._request("https://api.github.com/x") == {"ok": True}
+    assert seen["Authorization"] == "Bearer abc"
+
+
+def test_request_without_a_token(monkeypatch):
+    seen = {}
+
+    def urlopen(req, timeout):
+        seen.update(req.headers)
+        return FakeResponse(b"[]")
+
+    monkeypatch.setattr(pin.urllib.request, "urlopen", urlopen)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    assert pin._request("https://api.github.com/x") == []
+    assert "Authorization" not in seen
+
+
+@pytest.mark.parametrize("error,message", [
+    (http_error(403, b"API rate limit exceeded"), "rate limit reached"),
+    (http_error(403, b"forbidden"), "GitHub API error 403"),
+    (http_error(404), "Not found"),
+    (http_error(500), "GitHub API error 500"),
+    (urllib.error.URLError("no route"), "Could not reach GitHub: no route"),
+])
+def test_request_turns_failures_into_plain_errors(monkeypatch, error, message):
+    def urlopen(req, timeout):
+        raise error
+
+    monkeypatch.setattr(pin.urllib.request, "urlopen", urlopen)
+    with pytest.raises(pin.PinError, match=message):
+        pin._request("https://api.github.com/x")
+
+
+def fake_api(monkeypatch, responses):
+    """Answer _request from a dict of URL suffix -> response (or exception)."""
+    calls = []
+
+    def request(url):
+        calls.append(url)
+        for suffix, response in responses.items():
+            if url.endswith(suffix):
+                if isinstance(response, Exception):
+                    raise response
+                return response
+        raise AssertionError(f"unexpected call {url}")
+
+    monkeypatch.setattr(pin, "_request", request)
+    return calls
+
+
+def test_latest_tag_prefers_the_latest_release_and_caches_it(monkeypatch):
+    calls = fake_api(monkeypatch, {"/releases/latest": {"tag_name": "v7.0.1"}})
+    resolver = pin.Resolver()
+    assert resolver.latest_tag("actions/checkout") == "v7.0.1"
+    assert resolver.latest_tag("actions/checkout") == "v7.0.1"
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("release", [
+    pin.PinError("Not found"),  # no releases at all
+    {"tag_name": None},         # a release without a tag
+    [],                         # something that is not a release
+])
+def test_latest_tag_falls_back_to_the_highest_tag(monkeypatch, release):
+    fake_api(monkeypatch, {
+        "/releases/latest": release,
+        "/tags?per_page=100": [{"name": "v1.0.0"}, {"name": "v2.1.0"}, {"name": "latest"}, "junk"],
+    })
+    assert pin.Resolver().latest_tag("o/r") == "v2.1.0"
+
+
+def test_latest_tag_with_nothing_to_pin_to(monkeypatch):
+    fake_api(monkeypatch, {"/releases/latest": pin.PinError("Not found"), "/tags?per_page=100": []})
+    with pytest.raises(pin.PinError, match="no releases or tags"):
+        pin.Resolver().latest_tag("o/r")
+
+
+def test_sha_for_resolves_and_caches(monkeypatch):
+    calls = fake_api(monkeypatch, {"/commits/v7.0.1": {"sha": SHA}})
+    resolver = pin.Resolver()
+    assert resolver.sha_for("actions/checkout", "v7.0.1") == SHA
+    assert resolver.sha_for("actions/checkout", "v7.0.1") == SHA
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("commit,message", [
+    ({"message": "no sha here"}, "Could not resolve"),
+    ([], "Could not resolve"),
+    ({"sha": "not-a-sha"}, "unexpected sha"),
+])
+def test_sha_for_rejects_bad_answers(monkeypatch, commit, message):
+    fake_api(monkeypatch, {"/commits/v1": commit})
+    with pytest.raises(pin.PinError, match=message):
+        pin.Resolver().sha_for("o/r", "v1")

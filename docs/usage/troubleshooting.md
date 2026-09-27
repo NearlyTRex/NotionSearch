@@ -47,7 +47,6 @@ The app also says so itself now: a sync that finds nothing reports
 Check you copied the token from a **connection** (Developer tools → Connections),
 not from the **Personal access tokens** tab beside it — they are different things.
 
-
 - Make sure you copied the connection's **access token**, not its ID
 - Copy the whole thing — it starts `ntn_` or `secret_`
 - If you regenerated the secret in Notion, the old one stops working. Paste the new

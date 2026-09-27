@@ -1,4 +1,10 @@
-FROM python:3.14-slim
+# Alpine rather than Debian slim: the slim image carries dozens of HIGH-severity
+# CVEs in packages Debian marks essential (util-linux, ncurses, perl-base,
+# systemd libraries) that this app never uses and that cannot be removed. Alpine
+# ships busybox instead, which leaves the image scan clean at half the size.
+# Every dependency, including uvicorn[standard]'s native extensions, publishes
+# musllinux wheels, so nothing is compiled here.
+FROM python:3.14-alpine
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -7,10 +13,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /srv
 
-# gosu drops privileges in the entrypoint after fixing up /data ownership.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends gosu \
-    && rm -rf /var/lib/apt/lists/*
+# su-exec drops privileges in the entrypoint after fixing up /data ownership.
+# apk upgrade picks up security fixes published since the base image was last
+# rebuilt, so a rebuild is always enough to clear a fixable CVE.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache su-exec
 
 # Dependencies first so code edits don't invalidate the layer.
 COPY requirements.txt .
@@ -19,7 +26,10 @@ COPY requirements.txt .
 # pip/_vendor/vendor.txt), which vulnerability scanners correctly report against
 # the image even though that code never executes here. Removing it deletes the
 # vulnerable files rather than suppressing the finding.
-RUN pip install --no-cache-dir -r requirements.txt \
+# --require-hashes: requirements.txt is hash-locked, so a tampered or swapped
+# package fails the build instead of shipping. --no-deps because the lock
+# already lists every transitive dependency.
+RUN pip install --no-cache-dir --require-hashes --no-deps -r requirements.txt \
     && rm -rf /usr/local/lib/python3.*/site-packages/pip \
               /usr/local/lib/python3.*/site-packages/pip-*.dist-info \
               /usr/local/lib/python3.*/ensurepip \

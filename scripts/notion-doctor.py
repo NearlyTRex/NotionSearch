@@ -109,7 +109,7 @@ def main() -> int:
         return 1
 
     bot = me.get("bot") or {}
-    print(f"\n  Key is valid.")
+    print("\n  Key is valid.")
     print(f"    integration : {me.get('name') or 'unnamed'}")
     print(f"    workspace   : {bot.get('workspace_name') or '(not reported)'}")
 

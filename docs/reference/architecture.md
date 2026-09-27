@@ -1,6 +1,6 @@
 # Architecture
 
-```
+```text
 Notion API  ──sync──>  SQLite (source of truth)  ──index──>  Meilisearch
                             │                                     │
                             └──────────>  FastAPI  <──────────────┘

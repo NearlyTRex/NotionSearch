@@ -33,20 +33,20 @@ bad static mount, or a pipeline that only works in-process.
 
 ## Meilisearch
 
-Search tests need it. Start one with a published port:
+Search tests need it. This starts one at the version `docker/docker-compose.yml`
+ships, then runs the command you give it against it:
 
 ```bash
-docker run -d --rm -p 127.0.0.1:7700:7700 \
-  -e MEILI_MASTER_KEY=testkey1234567890 \
-  -e MEILI_NO_ANALYTICS=true \
-  --name meili-test getmeili/meilisearch:v1.11
-
-MEILI_MASTER_KEY=testkey1234567890 .venv/bin/python -m pytest -q
+.github/scripts/with-meilisearch.sh .venv/bin/python -m pytest -q
 ```
+
+It is left running for the next run; `docker stop notionsearch-test-meili` stops
+it. CI uses the same script, so the tests always run against the Meilisearch that
+ships, including right after Dependabot bumps it.
 
 Without it, those tests **skip** and the run prints:
 
-```
+```text
 !!!!! Meilisearch was NOT running: search behaviour was not tested !!!!!
 ```
 
@@ -55,11 +55,9 @@ skipped it is not a passing build.
 
 ### In CI
 
-Set `REQUIRE_MEILI=1` to turn skipping into a hard error:
-
-```bash
-MEILI_MASTER_KEY=testkey1234567890 REQUIRE_MEILI=1 .venv/bin/python -m pytest -q
-```
+`with-meilisearch.sh` sets `REQUIRE_MEILI=1`, which turns skipping into a hard
+error: an unreachable server fails the run instead of quietly skipping the
+search tests.
 
 ## Isolation
 
@@ -104,16 +102,23 @@ cd tests && pytest
 
 ## Coverage
 
-The unit tier must keep **100% statement and branch coverage** of `app/`. The
-threshold lives in `pyproject.toml` and CI fails the build below it:
+Every line of Python in the repository must keep **100% statement and branch
+coverage**: the app (`app/`), the scripts users run (`scripts/`), and the tooling
+CI runs (`.github/scripts/`). The sources and threshold live under
+`[tool.coverage]` in `pyproject.toml`, and CI fails the build below it, on every
+Python version it tests:
 
 ```bash
-.venv/bin/python -m pytest tests/unit -q --cov
+.github/scripts/with-meilisearch.sh .venv/bin/python -m pytest tests/unit tests/tools -q --cov
 ```
 
-It is enforced against `tests/unit` only, because the integration tier runs the
-app in a **separate process** — coverage cannot see inside it. Integration tests
-prove behaviour end to end rather than contributing coverage.
+The run page shows the coverage table, with any missing lines, in the job
+summary.
+
+It is enforced against `tests/unit` and `tests/tools` only, because the
+integration tier runs the app in a **separate process** — coverage cannot see
+inside it. Integration tests prove behaviour end to end rather than contributing
+coverage.
 
 Genuinely unreachable code is marked `# pragma: no cover` (or `no branch`) with a
 comment saying why, so the exemptions stay few and reviewable rather than the
@@ -122,8 +127,8 @@ threshold being quietly lowered. There is currently one, in `app/main.py`.
 ## Linting
 
 ```bash
-.venv/bin/python -m ruff check app/ tests/
-.venv/bin/python -m ruff check --fix app/ tests/   # apply the safe fixes
+.venv/bin/python -m ruff check .
+.venv/bin/python -m ruff check --fix .   # apply the safe fixes
 node --check web/app.js
 ```
 
@@ -138,11 +143,15 @@ the suggestion would silently blank the location facet.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request:
+`.github/workflows/ci.yml` runs on every push and pull request. The Python and
+Lint jobs are reusable workflows from the shared
+[NearlyTRex/Workflows](https://github.com/NearlyTRex/Workflows) library, pinned
+to a commit; improvements to them belong there, so every repo gets them.
 
 | Job | What it does |
 |---|---|
-| Tests | ruff, shellcheck, the 100% coverage gate, then the integration tier against a real Meilisearch service |
+| Python 3.12, Python 3.14 | ruff, the integration tier against the Meilisearch that ships, then the unit and tooling tiers under the 100% coverage gate. 3.12 is the oldest version supported; 3.14 is what the container runs |
+| Lint | shellcheck, Markdown (rules in `.markdownlint.yaml`) and JSON |
 | Docker image | Builds the image, starts the stack, checks health, the UI, and that the app is not running as root |
 | Windows installer | Compiles the Inno Setup script and silently installs it, so a broken installer is caught here rather than at release |
 
@@ -155,6 +164,7 @@ That is not tidiness for its own sake — it means you can run **exactly what CI
 runs**, locally:
 
 ```bash
+.github/scripts/with-meilisearch.sh CMD     # run CMD against a test Meilisearch
 .github/scripts/shellcheck-all.sh          # every shell script in the repo
 .github/scripts/wait-for-health.sh          # wait for the stack, dump logs if not
 .github/scripts/check-endpoints.sh          # UI and static assets
@@ -178,3 +188,6 @@ run on its own.
 ```bash
 docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest
 ```
+
+In CI, zizmor audits them for security problems as part of the Security
+workflow.

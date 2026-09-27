@@ -1,0 +1,10 @@
+# Findings Trivy reports that are deliberate, each with the reason. Keep this
+# short: every entry is a check that no longer runs.
+
+# DS-0002: "Specify at least 1 USER command in Dockerfile".
+# The container starts as root on purpose, and only for as long as it takes the
+# entrypoint to adopt the owner of the bind-mounted ./data folder; it then drops
+# to that user with su-exec before the app starts. A fixed USER line would break
+# every host whose user id is not the one hard-coded (see docker/entrypoint.sh).
+# CI's "Confirm the app is not running as root" step verifies the drop happens.
+DS-0002
