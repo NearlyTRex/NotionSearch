@@ -3,6 +3,7 @@
 import logging
 import os
 import secrets
+import tomllib
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -21,7 +22,21 @@ logging.basicConfig(
 )
 log = logging.getLogger("notionsearch")
 
-WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+ROOT_DIR = Path(__file__).resolve().parent.parent
+WEB_DIR = ROOT_DIR / "web"
+
+
+def read_version(pyproject: Path = ROOT_DIR / "pyproject.toml") -> str:
+    """The version in pyproject.toml, the one place it is written.
+
+    Prepare Release bumps it there, so reading it rather than repeating it here
+    keeps the app from reporting a version it isn't. Anything unreadable falls
+    back to 0.0.0 rather than stopping the app from starting.
+    """
+    try:
+        return tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
+    except (OSError, KeyError, tomllib.TOMLDecodeError):
+        return "0.0.0"
 # Set APP_PASSWORD to require a login; unset means open (fine on localhost).
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "").strip()
 SESSION_COOKIE = "notionsearch_session"
@@ -41,7 +56,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="NotionSearch", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="NotionSearch", version=read_version(), lifespan=lifespan)
 
 
 def serializer() -> URLSafeTimedSerializer:
