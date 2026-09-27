@@ -2,7 +2,7 @@ name: notionsearch
 
 services:
   meilisearch:
-    image: getmeili/meilisearch:v1.11
+    image: getmeili/meilisearch:v1.53
     container_name: notionsearch-meili
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-notionsearch_local_key_change_me}
