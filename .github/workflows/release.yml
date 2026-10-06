@@ -18,7 +18,7 @@ jobs:
   # doesn't trigger CI, so this is where a release commit gets tested.
   check:
     name: Check
-    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@189a9c599b51396d09f95469f00b561da645ded1 # v0.2.7
+    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@4fe68c91984dd09dea6988fd603b128bc3f44ff7 # v0.2.9
     permissions:
       contents: read
     with:
@@ -28,7 +28,7 @@ jobs:
 
   pending:
     name: Pending
-    uses: NearlyTRex/Workflows/.github/workflows/release-check.yml@189a9c599b51396d09f95469f00b561da645ded1 # v0.2.7
+    uses: NearlyTRex/Workflows/.github/workflows/release-check.yml@4fe68c91984dd09dea6988fd603b128bc3f44ff7 # v0.2.9
     permissions:
       contents: read
     with:
@@ -38,7 +38,7 @@ jobs:
     name: Installer
     needs: pending
     if: needs.pending.outputs.pending == 'true'
-    uses: NearlyTRex/Workflows/.github/workflows/inno-setup.yml@189a9c599b51396d09f95469f00b561da645ded1 # v0.2.7
+    uses: NearlyTRex/Workflows/.github/workflows/inno-setup.yml@4fe68c91984dd09dea6988fd603b128bc3f44ff7 # v0.2.9
     permissions:
       contents: read
     with:
@@ -52,7 +52,7 @@ jobs:
   release:
     name: Release
     needs: [check, installer]
-    uses: NearlyTRex/Workflows/.github/workflows/release.yml@189a9c599b51396d09f95469f00b561da645ded1 # v0.2.7
+    uses: NearlyTRex/Workflows/.github/workflows/release.yml@4fe68c91984dd09dea6988fd603b128bc3f44ff7 # v0.2.9
     permissions:
       contents: write
     with:
