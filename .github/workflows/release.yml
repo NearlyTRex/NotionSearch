@@ -14,11 +14,21 @@ on:
 permissions: {}
 
 jobs:
+  pending:
+    name: Pending
+    uses: NearlyTRex/Workflows/.github/workflows/release-check.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
+    permissions:
+      contents: read
+    with:
+      version-file: pyproject.toml
+
   # The same tests as CI. Release PRs are opened with the workflow token, which
   # doesn't trigger CI, so this is where a release commit gets tested.
   check:
     name: Check
-    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@45bf3d2ed784d826f7951b407631311bce30d435 # v0.2.14
+    needs: pending
+    if: needs.pending.outputs.pending == 'true'
+    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
     permissions:
       contents: read
     with:
@@ -26,19 +36,11 @@ jobs:
       commands: .github/scripts/with-meilisearch.sh python -m pytest tests/integration -q
       test-command: pytest -q tests/unit tests/tools
 
-  pending:
-    name: Pending
-    uses: NearlyTRex/Workflows/.github/workflows/release-check.yml@45bf3d2ed784d826f7951b407631311bce30d435 # v0.2.14
-    permissions:
-      contents: read
-    with:
-      version-file: pyproject.toml
-
   installer:
     name: Installer
     needs: pending
     if: needs.pending.outputs.pending == 'true'
-    uses: NearlyTRex/Workflows/.github/workflows/inno-setup.yml@45bf3d2ed784d826f7951b407631311bce30d435 # v0.2.14
+    uses: NearlyTRex/Workflows/.github/workflows/inno-setup.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
     permissions:
       contents: read
     with:
@@ -49,10 +51,22 @@ jobs:
       smoke-test: .github\scripts\smoke-test-installer.ps1
       artifact: installer
 
+  # Signs build provenance for the installer, so a download can be checked with
+  # gh attestation verify.
+  attest:
+    name: Attest
+    needs: [installer]
+    uses: NearlyTRex/Workflows/.github/workflows/attest.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
+    permissions:
+      id-token: write
+      attestations: write
+    with:
+      artifacts: installer
+
   release:
     name: Release
-    needs: [check, installer]
-    uses: NearlyTRex/Workflows/.github/workflows/release.yml@45bf3d2ed784d826f7951b407631311bce30d435 # v0.2.14
+    needs: [check, attest, installer]
+    uses: NearlyTRex/Workflows/.github/workflows/release.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
     permissions:
       contents: write
     with:

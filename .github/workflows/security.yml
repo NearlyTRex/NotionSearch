@@ -19,7 +19,9 @@ permissions: {}
 
 concurrency:
   group: security-${{ github.ref }}
-  cancel-in-progress: true
+  # Only pull requests: a newer push supersedes their run. On main every run
+  # finishes, since each push's secret scan covers only that push's commits.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # zizmor over the workflows, gitleaks over the whole git history (with the
@@ -27,7 +29,7 @@ jobs:
   # runtime dependencies.
   security:
     name: Security
-    uses: NearlyTRex/Workflows/.github/workflows/security.yml@45bf3d2ed784d826f7951b407631311bce30d435 # v0.2.14
+    uses: NearlyTRex/Workflows/.github/workflows/security.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
     permissions:
       contents: read
     with:
@@ -40,7 +42,7 @@ jobs:
 
   codeql:
     name: CodeQL
-    uses: NearlyTRex/Workflows/.github/workflows/codeql.yml@45bf3d2ed784d826f7951b407631311bce30d435 # v0.2.14
+    uses: NearlyTRex/Workflows/.github/workflows/codeql.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
     permissions:
       actions: read
       contents: read
@@ -52,7 +54,7 @@ jobs:
   dependency-review:
     name: Dependency Review
     if: github.event_name == 'pull_request'
-    uses: NearlyTRex/Workflows/.github/workflows/dependency-review.yml@45bf3d2ed784d826f7951b407631311bce30d435 # v0.2.14
+    uses: NearlyTRex/Workflows/.github/workflows/dependency-review.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
     permissions:
       contents: read
 
@@ -61,7 +63,7 @@ jobs:
   # .trivyignore.
   container-scan:
     name: Container Scan
-    uses: NearlyTRex/Workflows/.github/workflows/container-scan.yml@45bf3d2ed784d826f7951b407631311bce30d435 # v0.2.14
+    uses: NearlyTRex/Workflows/.github/workflows/container-scan.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
     permissions:
       contents: read
     with:

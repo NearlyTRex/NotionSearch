@@ -19,12 +19,14 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Only pull requests: a newer push supersedes their run. On main every run
+  # finishes, since each push's secret scan covers only that push's commits.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   python:
     name: Python ${{ matrix.python }}
-    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@45bf3d2ed784d826f7951b407631311bce30d435 # v0.2.14
+    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
     permissions:
       contents: read
     strategy:
@@ -48,7 +50,7 @@ jobs:
 
   lint:
     name: Lint
-    uses: NearlyTRex/Workflows/.github/workflows/lint.yml@45bf3d2ed784d826f7951b407631311bce30d435 # v0.2.14
+    uses: NearlyTRex/Workflows/.github/workflows/lint.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
     permissions:
       contents: read
 
@@ -57,7 +59,7 @@ jobs:
   # dropped root. Logs are printed if anything fails.
   docker:
     name: Docker stack
-    uses: NearlyTRex/Workflows/.github/workflows/compose-test.yml@45bf3d2ed784d826f7951b407631311bce30d435 # v0.2.14
+    uses: NearlyTRex/Workflows/.github/workflows/compose-test.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
     permissions:
       contents: read
     with:
@@ -72,7 +74,7 @@ jobs:
   # release.yml builds the real one.
   installer:
     name: Windows installer
-    uses: NearlyTRex/Workflows/.github/workflows/inno-setup.yml@45bf3d2ed784d826f7951b407631311bce30d435 # v0.2.14
+    uses: NearlyTRex/Workflows/.github/workflows/inno-setup.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
     permissions:
       contents: read
     with:
