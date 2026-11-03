@@ -26,7 +26,7 @@ concurrency:
 jobs:
   python:
     name: Python ${{ matrix.python }}
-    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
+    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@4a7f6e3f7dbda5bbe67fd2f25d6f03373ea5f811 # v0.2.25
     permissions:
       contents: read
     strategy:
@@ -50,7 +50,7 @@ jobs:
 
   lint:
     name: Lint
-    uses: NearlyTRex/Workflows/.github/workflows/lint.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
+    uses: NearlyTRex/Workflows/.github/workflows/lint.yml@4a7f6e3f7dbda5bbe67fd2f25d6f03373ea5f811 # v0.2.25
     permissions:
       contents: read
 
@@ -59,7 +59,7 @@ jobs:
   # dropped root. Logs are printed if anything fails.
   docker:
     name: Docker stack
-    uses: NearlyTRex/Workflows/.github/workflows/compose-test.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
+    uses: NearlyTRex/Workflows/.github/workflows/compose-test.yml@4a7f6e3f7dbda5bbe67fd2f25d6f03373ea5f811 # v0.2.25
     permissions:
       contents: read
     with:
@@ -74,7 +74,7 @@ jobs:
   # release.yml builds the real one.
   installer:
     name: Windows installer
-    uses: NearlyTRex/Workflows/.github/workflows/inno-setup.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
+    uses: NearlyTRex/Workflows/.github/workflows/inno-setup.yml@4a7f6e3f7dbda5bbe67fd2f25d6f03373ea5f811 # v0.2.25
     permissions:
       contents: read
     with:
