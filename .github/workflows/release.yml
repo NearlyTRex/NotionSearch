@@ -16,7 +16,7 @@ permissions: {}
 jobs:
   pending:
     name: Pending
-    uses: NearlyTRex/Workflows/.github/workflows/release-check.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
+    uses: NearlyTRex/Workflows/.github/workflows/release-check.yml@4a7f6e3f7dbda5bbe67fd2f25d6f03373ea5f811 # v0.2.25
     permissions:
       contents: read
     with:
@@ -28,7 +28,7 @@ jobs:
     name: Check
     needs: pending
     if: needs.pending.outputs.pending == 'true'
-    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
+    uses: NearlyTRex/Workflows/.github/workflows/python-ci.yml@4a7f6e3f7dbda5bbe67fd2f25d6f03373ea5f811 # v0.2.25
     permissions:
       contents: read
     with:
@@ -40,7 +40,7 @@ jobs:
     name: Installer
     needs: pending
     if: needs.pending.outputs.pending == 'true'
-    uses: NearlyTRex/Workflows/.github/workflows/inno-setup.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
+    uses: NearlyTRex/Workflows/.github/workflows/inno-setup.yml@4a7f6e3f7dbda5bbe67fd2f25d6f03373ea5f811 # v0.2.25
     permissions:
       contents: read
     with:
@@ -56,7 +56,7 @@ jobs:
   attest:
     name: Attest
     needs: [installer]
-    uses: NearlyTRex/Workflows/.github/workflows/attest.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
+    uses: NearlyTRex/Workflows/.github/workflows/attest.yml@4a7f6e3f7dbda5bbe67fd2f25d6f03373ea5f811 # v0.2.25
     permissions:
       id-token: write
       attestations: write
@@ -66,7 +66,7 @@ jobs:
   release:
     name: Release
     needs: [check, attest, installer]
-    uses: NearlyTRex/Workflows/.github/workflows/release.yml@9e1d569f0f334c38fc2f24cc45a9428b86afb623 # v0.2.20
+    uses: NearlyTRex/Workflows/.github/workflows/release.yml@4a7f6e3f7dbda5bbe67fd2f25d6f03373ea5f811 # v0.2.25
     permissions:
       contents: write
     with:
