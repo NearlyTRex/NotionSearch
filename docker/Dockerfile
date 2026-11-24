@@ -4,7 +4,7 @@
 # ships busybox instead, which leaves the image scan clean at half the size.
 # Every dependency, including uvicorn[standard]'s native extensions, publishes
 # musllinux wheels, so nothing is compiled here.
-FROM python:3.14-alpine
+FROM python:3.15-alpine
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
